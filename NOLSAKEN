@@ -1019,6 +1019,7 @@ MVP2:AddSlider('MySlider4', {
     end
 })
 
+
 getgenv().RS = game:GetService("ReplicatedStorage")
 getgenv().TS = game:GetService("TweenService")
 getgenv().RSvc = game:GetService("RunService")
@@ -1152,9 +1153,6 @@ getgenv().AttemptBlockAnimation = function(track)
     local id = GetAnimIdNumeric(track.Animation)
     if not id or not AutoBlockAnims[id] then return end
 
-    local now = tick()
-    if AnimationBlockedUntil[track] and now < AnimationBlockedUntil[track] then return end
-
     local char = track.Parent and track.Parent.Parent
     if not char then return end
 
@@ -1169,7 +1167,6 @@ getgenv().AttemptBlockAnimation = function(track)
     if FacingCheckEnabled and not IsFacingTarget(myRoot, hrp) then return end
 
     FireBlockRemote()
-    AnimationBlockedUntil[track] = now + 1.2
 end
 
 getgenv().HookAnimation = function(track)
@@ -1260,9 +1257,6 @@ getgenv().AttemptBlockSound = function(snd)
     local id = GetSoundIdNumeric(snd)
     if not id or not AutoBlockSounds[id] then return end
 
-    local now = tick()
-    if SoundBlockedUntil[snd] and now < SoundBlockedUntil[snd] then return end
-
     local myRoot = LocalP.Character and LocalP.Character:FindFirstChild("HumanoidRootPart")
     if not myRoot then return end
 
@@ -1283,7 +1277,6 @@ getgenv().AttemptBlockSound = function(snd)
     if FacingCheckEnabled and not IsFacingTarget(myRoot, hrp) then return end
 
     FireBlockRemote()
-    SoundBlockedUntil[snd] = now + 1.2
 end
 
 getgenv().HookSound = function(snd)
@@ -1413,7 +1406,7 @@ local config_114514 = {
     Enabled = false,
     BaseDistance = 16,
     ScanInterval = 0.0005,
-    BlockCooldown = 0.06,
+    BlockCooldown = 0,
     MoveCompBase = 1.8,
     MoveCompFactor = 0.3,
     SpeedThreshold = 6,
@@ -1464,10 +1457,6 @@ pcall(function()
     local combatConnection = nil
     local lastScanTime = 0
     local visualizationParts = {}
-    local soundCache = {}
-    local animCache = {}
-    local lastSoundCheck = 0
-    local lastAnimCheck = 0
     local lastPingCheck = 0
     local currentPing = 0
     local threatCache = {}
@@ -1580,26 +1569,17 @@ pcall(function()
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not rootPart then return false end
         
-        local currentTime = os.clock()
-        if currentTime - lastSoundCheck < 0.0003 then
-            return soundCache[character] or false
-        end
-        lastSoundCheck = currentTime
-        
-        local found = false
         for _, child in ipairs(rootPart:GetChildren()) do
             if child:IsA("Sound") then
                 local soundId = tostring(child.SoundId)
                 local numericId = string.match(soundId, "(%d+)$")
                 if numericId and soundLookup[numericId] then
-                    found = true
-                    break
+                    return true
                 end
             end
         end
         
-        soundCache[character] = found
-        return found
+        return false
     end
     
     local function HasTargetAnimation(character)
@@ -1607,13 +1587,6 @@ pcall(function()
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         if not humanoid then return false end
         
-        local currentTime = os.clock()
-        if currentTime - lastAnimCheck < 0.0003 then
-            return animCache[character] or false
-        end
-        lastAnimCheck = currentTime
-        
-        local found = false
         local animator = humanoid:FindFirstChildOfClass("Animator")
         if animator then
             for _, track in pairs(animator:GetPlayingAnimationTracks()) do
@@ -1621,15 +1594,13 @@ pcall(function()
                     local animId = tostring(track.Animation.AnimationId)
                     local numericId = string.match(animId, "(%d+)$")
                     if numericId and animLookup[numericId] then
-                        found = true
-                        break
+                        return true
                     end
                 end
             end
         end
         
-        animCache[character] = found
-        return found
+        return false
     end
     
     local function GetMoveCompensation()
@@ -1654,7 +1625,10 @@ pcall(function()
     
     local function GetTotalDetectionRange(killer)
         if config_114514.UseSimplePrediction then
-            return config_114514.BaseDistance + config_114514.SimplePredictAmount
+            local base = config_114514.BaseDistance
+            local simple = config_114514.SimplePredictAmount
+            local pingBonus = GetPingCompensation() * 4
+            return base + simple + pingBonus
         else
             local base = config_114514.BaseDistance
             local moveBonus = GetMoveCompensation()
@@ -1772,22 +1746,19 @@ pcall(function()
     end
     
     local function GetAdjustedCooldown()
-        local ping = GetPing()
-        return math.max(0.04, config_114514.BlockCooldown - (ping / 1000 * 0.7))
+        return 0
     end
     
     local function PerformBlock()
         local now = os.clock()
-        if now - lastBlockTime >= GetAdjustedCooldown() then
-            pcall(function()
-                local args = {
-                    "UseActorAbility",
-                    { buffer.fromstring("\003\005\000\000\000Block") }
-                }
-                game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Network"):WaitForChild("RemoteEvent"):FireServer(unpack(args))
-                lastBlockTime = now
-            end)
-        end
+        pcall(function()
+            local args = {
+                "UseActorAbility",
+                { buffer.fromstring("\003\005\000\000\000Block") }
+            }
+            game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Network"):WaitForChild("RemoteEvent"):FireServer(unpack(args))
+            lastBlockTime = now
+        end)
     end
     
     local function CombatLoop()
@@ -2040,7 +2011,6 @@ PunchBox:AddToggle("PunchSoundDetection", {
     Default = true,
     Callback = function(v) punchConfig.UseSoundDetection = v end
 })
-
 local Generator = Tabs.zdx:AddLeftGroupbox("自动修机")
 
 Generator:AddSlider("RepairSpeed", {
@@ -4758,139 +4728,145 @@ local LeftGroupBox = Tabs.Aimbot:AddRightGroupbox('1x4远程预判')
 
 local RunService = game:GetService("RunService")
 local LocalPlayer = game:GetService("Players").LocalPlayer
-	local PredictionAim = {
-		Enabled = false,
-		Prediction = 4,
-		Duration = 1.7,
-		Targets = { "Guest1337", "007n7", "Builderman", "Chance", "Dusekkar", "Elliot", "Noob", "Shedletsky", "Taph", "TwoTime" },
-		TrackedAnimations = {
-	["131430497821198"] = true,
-    ["119181003138006"] = true,
-    ["70447634862911"] = true,
-    ["93491748129367"] = true
-		},
-		Humanoid = nil,
-		HRP = nil,
-		LastTriggerTime = 1,
-		IsAiming = false,
-		OriginalState = nil
-	}
+local PredictionAim = {
+    Enabled = false,
+    Prediction = 4,
+    Duration = 1.7,
+    Targets = { "Guest1337", "007n7", "Builderman", "Chance", "Dusekkar", "Elliot", "Noob", "Shedletsky", "Taph", "TwoTime" },
+    TrackedAnimations = {
+        ["131530909428809"] = true,
+        ["122225989492265"] = true,
+        ["115542328123604"] = true,
+        ["105750427213215"] = true,
+        ["108009371791486"] = true
+    },
+    Humanoid = nil,
+    HRP = nil,
+    LastTriggerTime = 1,
+    IsAiming = false,
+    OriginalState = nil
+}
 
-	local function CreateUI()
-		LeftGroupBox:AddToggle("AimToggle", {
-			Text = "预判瞄准",
-			Default = false,
-			Callback = function(Value)
-				PredictionAim.Enabled = Value
-			end,
-		})
-		LeftGroupBox:AddSlider("PredictionSlider", {
-			Text = "预判强度",
-			Default = 4,
-			Min = 0,
-			Max = 15,
-			Rounding = 1,
-			Callback = function(Value)
-				PredictionAim.Prediction = Value
-			end,
-		})
-	end
+local function CreateUI()
+    LeftGroupBox:AddToggle("AimToggle", {
+        Text = "预判瞄准",
+        Default = false,
+        Callback = function(Value)
+            PredictionAim.Enabled = Value
+        end,
+    })
+    LeftGroupBox:AddSlider("PredictionSlider", {
+        Text = "预判强度",
+        Default = 4,
+        Min = 0,
+        Max = 15,
+        Rounding = 1,
+        Callback = function(Value)
+            PredictionAim.Prediction = Value
+        end,
+    })
+end
 
-	local function getValidTarget()
-		local killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Survivors")
-		if killersFolder then
-			for _, name in ipairs(PredictionAim.Targets) do
-				local target = killersFolder:FindFirstChild(name)
-				if target and target:FindFirstChild("HumanoidRootPart") then
-					return target.HumanoidRootPart
-				end
-			end
-		end
-		return nil
-	end
+local function getClosestTarget()
+    local killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
+    if not killersFolder then return nil end
+    local myHRP = PredictionAim.HRP
+    if not myHRP then return nil end
+    local closest, closestDist = nil, math.huge
+    for _, targetName in ipairs(PredictionAim.Targets) do
+        local target = killersFolder:FindFirstChild(targetName)
+        if target and target:FindFirstChild("HumanoidRootPart") then
+            local targetHRP = target.HumanoidRootPart
+            local dist = (targetHRP.Position - myHRP.Position).Magnitude
+            if dist < closestDist then
+                closestDist = dist
+                closest = targetHRP
+            end
+        end
+    end
+    return closest
+end
 
-	local function getPlayingAnimationIds()
-		local ids = {}
-		if PredictionAim.Humanoid then
-			for _, track in ipairs(PredictionAim.Humanoid:GetPlayingAnimationTracks()) do
-				if track.Animation and track.Animation.AnimationId then
-					local id = track.Animation.AnimationId:match("%d+")
-					if id then ids[id] = true end
-				end
-			end
-		end
-		return ids
-	end
+local function getPlayingAnimationIds()
+    local ids = {}
+    if PredictionAim.Humanoid then
+        for _, track in ipairs(PredictionAim.Humanoid:GetPlayingAnimationTracks()) do
+            if track.Animation and track.Animation.AnimationId then
+                local id = track.Animation.AnimationId:match("%d+")
+                if id then ids[id] = true end
+            end
+        end
+    end
+    return ids
+end
 
-	local function setupCharacter(char)
-		PredictionAim.Humanoid = char:WaitForChild("Humanoid")
-		PredictionAim.HRP = char:WaitForChild("HumanoidRootPart")
-	end
+local function setupCharacter(char)
+    PredictionAim.Humanoid = char:WaitForChild("Humanoid")
+    PredictionAim.HRP = char:WaitForChild("HumanoidRootPart")
+end
 
-	local function OnRenderStep()
-		if not PredictionAim.Enabled or not PredictionAim.Humanoid or not PredictionAim.HRP then return end
-		local playing = getPlayingAnimationIds()
-		local triggered = false
-		for id in pairs(PredictionAim.TrackedAnimations) do
-			if playing[id] then triggered = true; break end
-		end
+local function OnRenderStep()
+    if not PredictionAim.Enabled or not PredictionAim.Humanoid or not PredictionAim.HRP then return end
+    local playing = getPlayingAnimationIds()
+    local triggered = false
+    for id in pairs(PredictionAim.TrackedAnimations) do
+        if playing[id] then
+            triggered = true
+            break
+        end
+    end
 
-		if triggered then
-			PredictionAim.LastTriggerTime = tick()
-			PredictionAim.IsAiming = true
-		end
+    if triggered then
+        PredictionAim.LastTriggerTime = tick()
+        PredictionAim.IsAiming = true
+    end
 
-		if PredictionAim.IsAiming and tick() - PredictionAim.LastTriggerTime <= PredictionAim.Duration then
-			if not PredictionAim.OriginalState then
-				PredictionAim.OriginalState = {
-					WalkSpeed = PredictionAim.Humanoid.WalkSpeed,
-					JumpPower = PredictionAim.Humanoid.JumpPower,
-					AutoRotate = PredictionAim.Humanoid.AutoRotate
-				}
-				PredictionAim.Humanoid.AutoRotate = false
-				PredictionAim.HRP.AssemblyAngularVelocity = Vector3.zero
-			end
-			local targetHRP = getValidTarget()
-			if targetHRP then
-				local predictedPos = targetHRP.Position + (targetHRP.CFrame.LookVector * PredictionAim.Prediction)
-				local direction = (predictedPos - PredictionAim.HRP.Position).Unit
-				local yRot = math.atan2(-direction.X, -direction.Z)
-				PredictionAim.HRP.CFrame = CFrame.new(PredictionAim.HRP.Position) * CFrame.Angles(0, yRot, 0)
-			end
-		elseif PredictionAim.IsAiming then
-			PredictionAim.IsAiming = false
-			if PredictionAim.OriginalState then
-				PredictionAim.Humanoid.WalkSpeed = PredictionAim.OriginalState.WalkSpeed
-				PredictionAim.Humanoid.JumpPower = PredictionAim.OriginalState.JumpPower
-				PredictionAim.Humanoid.AutoRotate = PredictionAim.OriginalState.AutoRotate
-				PredictionAim.OriginalState = nil
-			end
-		end
-	end
+    if PredictionAim.IsAiming and tick() - PredictionAim.LastTriggerTime <= PredictionAim.Duration then
+        if not PredictionAim.OriginalState then
+            PredictionAim.OriginalState = {
+                WalkSpeed = PredictionAim.Humanoid.WalkSpeed,
+                JumpPower = PredictionAim.Humanoid.JumpPower,
+                AutoRotate = PredictionAim.Humanoid.AutoRotate
+            }
+            PredictionAim.Humanoid.AutoRotate = false
+            PredictionAim.HRP.AssemblyAngularVelocity = Vector3.zero
+        end
+        local targetHRP = getClosestTarget()
+        if targetHRP then
+            local velocity = targetHRP.AssemblyLinearVelocity or Vector3.zero
+            local predictedPos = targetHRP.Position + (velocity * PredictionAim.Prediction / 10)
+            local direction = (predictedPos - PredictionAim.HRP.Position).Unit
+            local yRot = math.atan2(-direction.X, -direction.Z)
+            PredictionAim.HRP.CFrame = CFrame.new(PredictionAim.HRP.Position) * CFrame.Angles(0, yRot, 0)
+        end
+    elseif PredictionAim.IsAiming then
+        PredictionAim.IsAiming = false
+        if PredictionAim.OriginalState then
+            PredictionAim.Humanoid.WalkSpeed = PredictionAim.OriginalState.WalkSpeed
+            PredictionAim.Humanoid.JumpPower = PredictionAim.OriginalState.JumpPower
+            PredictionAim.Humanoid.AutoRotate = PredictionAim.OriginalState.AutoRotate
+            PredictionAim.OriginalState = nil
+        end
+    end
+end
 
-	if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
-	LocalPlayer.CharacterAdded:Connect(setupCharacter)
-	CreateUI()
-	RunService.RenderStepped:Connect(OnRenderStep)
+if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
+CreateUI()
+RunService.RenderStepped:Connect(OnRenderStep)
 
 local SpecialAimbot = Tabs.Aimbot:AddLeftGroupbox("幸存者自瞄(无声静默)")
 
 -- 默认距离设置
 local defaultAimDistance = 100
 local aimDistanceSettings = {
-    SSA = defaultAimDistance,
     GAA = defaultAimDistance
 }
-
--- 平滑度和锁定时间设置
 local aimSmoothnessSettings = {
-    SSA = 50,
-    GAA = 50
+    GAA = 20
 }
-
 local aimDurationSettings = {
-    SSA = 100,
-    GAA = 100
+    GAA = 25
 }
 
 SpecialAimbot:AddSlider("GAA_Distance", {
@@ -4903,122 +4879,136 @@ SpecialAimbot:AddSlider("GAA_Distance", {
         aimDistanceSettings.GAA = value
     end
 })
+SpecialAimbot:AddSlider("GAA_Smoothness", {
+    Text = "相机平滑度",
+    Default = aimSmoothnessSettings.GAA,
+    Min = 5,
+    Max = 100,
+    Rounding = 1,
+    Callback = function(value)
+        aimSmoothnessSettings.GAA = value
+    end
+})
+SpecialAimbot:AddSlider("GAA_Duration", {
+    Text = "相机锁定持续时间(帧)",
+    Default = aimDurationSettings.GAA,
+    Min = 10,
+    Max = 200,
+    Rounding = 1,
+    Callback = function(value)
+        aimDurationSettings.GAA = value
+    end
+})
 
-local function SmoothLookAt(currentCF, targetPos, smoothness)
-    local currentLook = currentCF.LookVector
-    local targetLook = (targetPos - currentCF.Position).Unit
-    local newLook = currentLook:Lerp(targetLook, 1/smoothness)
-    return CFrame.lookAt(currentCF.Position, currentCF.Position + newLook)
+local function SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
+    local targetLook = (targetPos - currentCamCF.Position).Unit
+    local currentLook = currentCamCF.LookVector
+    local newLook = currentLook:Lerp(targetLook, 1 / smoothness)
+    return CFrame.lookAt(currentCamCF.Position, currentCamCF.Position + newLook * 100)
 end
 
-function AimSlashShedletsky(value)
-    local aimslashsword = value
-    if value then
-        local shedaimbotsounds = {
-            "rbxassetid://106397684977541",
-            "rbxassetid://106397684977541"
-        }
-        aimslash = game.Players.LocalPlayer.Character.Sword.ChildAdded:Connect(function(child)
-            if not aimslashsword then return end
-            for _, v in ipairs(shedaimbotsounds) do
-                if child.Name == v then
-                    local targetkiller = game.Workspace.Players:FindFirstChild("Killers"):FindFirstChildOfClass("Model")
-                    if targetkiller and targetkiller:FindFirstChild("HumanoidRootPart") then
-                        if game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                            local distance = (targetkiller.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                            if distance <= aimDistanceSettings.SSA then
-                                local number = 1
-                                local smoothness = aimSmoothnessSettings.SSA
-                                local duration = aimDurationSettings.SSA
-                                local connection
-                                connection = game:GetService("RunService").RenderStepped:Connect(function()
-                                    if number <= duration then
-                                        task.wait(0.01)
-                                        number = number + 1
-                                        local currentCF = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
-                                        local targetPos = targetkiller.HumanoidRootPart.Position
-                                        game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = SmoothLookAt(currentCF, targetPos, smoothness)
-                                    else
-                                        connection:Disconnect()
-                                    end
-                                end)
-                            end
-                        end
-                    end
-                end
+local function getNearestKiller()
+    local killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
+    if not killersFolder then
+        killersFolder = workspace:FindFirstChild("Killers")
+    end
+    if not killersFolder then return nil end
+    local myHRP = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+    local nearest, nearestDist = nil, math.huge
+    for _, killer in ipairs(killersFolder:GetChildren()) do
+        if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
+            local dist = (killer.HumanoidRootPart.Position - myHRP.Position).Magnitude
+            if dist < nearestDist and dist <= aimDistanceSettings.GAA then
+                nearestDist = dist
+                nearest = killer
             end
-        end)
-    else
-        if aimslash then
-            aimslash:Disconnect()
         end
     end
+    return nearest
 end
 
-function AimAttackGuest(value)
-    local aimattackguest = value
-    if value then
-        aimguest = game:GetService("ReplicatedStorage").Modules.Network.RemoteEvent.OnClientEvent:Connect(function(eventName, eventArg)
-            if not aimattackguest then return end
-            if eventName == "UseActorAbility" and type(eventArg) == "table" and eventArg[1] and tostring(eventArg[1]) == buffer.fromstring("\"Punch\"") then
-                local targetkiller = game.Workspace.Players:FindFirstChild("Killers"):FindFirstChildOfClass("Model")
-                if targetkiller and targetkiller:FindFirstChild("HumanoidRootPart") then
-                    if game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
-                        local distance = (targetkiller.HumanoidRootPart.Position - game.Players.LocalPlayer.Character.HumanoidRootPart.Position).Magnitude
-                        if distance <= aimDistanceSettings.GAA then
-                            local number = 1
-                            local smoothness = aimSmoothnessSettings.GAA
-                            local duration = aimDurationSettings.GAA
-                            local connection
-                            connection = game:GetService("RunService").RenderStepped:Connect(function()
-                                if number <= duration then
-                                    task.wait(0.01)
-                                    number = number + 1
-                                    local currentCF = game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame
-                                    local targetPos = targetkiller.HumanoidRootPart.Position
-                                    game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = SmoothLookAt(currentCF, targetPos, smoothness)
-                                else
-                                    connection:Disconnect()
-                                end
-                            end)
-                        end
-                    end
-                end
+local function executeAim()
+    local targetKiller = getNearestKiller()
+    if not targetKiller or not targetKiller:FindFirstChild("HumanoidRootPart") then return end
+    local smoothness = aimSmoothnessSettings.GAA
+    local duration = aimDurationSettings.GAA
+    local iterations = 0
+    local conn
+    conn = game:GetService("RunService").RenderStepped:Connect(function()
+        iterations = iterations + 1
+        if iterations <= duration then
+            local currentCamCF = workspace.CurrentCamera.CFrame
+            local targetPos = targetKiller.HumanoidRootPart.Position
+            workspace.CurrentCamera.CFrame = SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
+        else
+            conn:Disconnect()
+        end
+    end)
+end
+
+local aimConnection = nil
+local function setupGuestAim(enabled)
+    if aimConnection then
+        aimConnection:Disconnect()
+        aimConnection = nil
+    end
+    if not enabled then return end
+    local player = game.Players.LocalPlayer
+    local character = player.Character
+    if not character then
+        player.CharacterAdded:Wait()
+        character = player.Character
+    end
+    local targetSoundIds = {
+        ["124900635250184"] = true, ["124900635250184"] = true, ["124900635250184"] = true,
+        ["124900635250184"] = true, ["124900635250184"] = true, ["124900635250184"] = true,
+        ["124900635250184"] = true, ["124900635250184"] = true, ["124900635250184"] = true,
+        ["124900635250184"] = true, ["124900635250184"] = true, ["124900635250184"] = true,
+    }
+    local function onSoundAdded(sound)
+        if sound:IsA("Sound") then
+            local soundId = tostring(sound.SoundId)
+            local numericId = soundId:match("(%d+)$")
+            if numericId and targetSoundIds[numericId] then
+                executeAim()
+                return
             end
-        end)
-    else
-        if aimguest then
-            aimguest:Disconnect()
+            if soundId:find("Punch") or soundId:find("拳") or sound.Name:find("Punch") then
+                executeAim()
+            end
         end
     end
+    for _, child in ipairs(character:GetDescendants()) do
+        onSoundAdded(child)
+    end
+    aimConnection = character.DescendantAdded:Connect(onSoundAdded)
 end
 
-SpecialAimbot:AddToggle("GAA",{
-    Text = "访客自瞄",
+SpecialAimbot:AddToggle("GuestAimToggle", {
+    Text = "访客相机自瞄",
+    Default = false,
     Callback = function(v)
-        AimAttackGuest(v)
+        setupGuestAim(v)
     end
 })
 
 local aimbotNoilsounds = {
-    "rbxassetid://90768093259753"
+    "rbxassetid://90382006346718"
 }
 local aimbotNoilsounds2 = {
-    "rbxassetid://126318185932771"
+    "rbxassetid://134547841416465"
 }
-local Noloop
-local No2loop
+local Noloop = nil
+local No2loop = nil
 
--- Default settings
 local aimSettings = {
-    maxDistance = 50,  -- Default max aim distance
-    lockTime = 3.3     -- Default lock time in seconds (330 iterations * 0.01)
+    maxDistance = 50,
+    lockTime = 3.3
 }
 
--- Create Noli Aimbot groupbox
 local g = Tabs.Aimbot:AddRightGroupbox('Noli自瞄')
 
--- Add sliders to the groupbox
 g:AddSlider('AimDistance', {
     Text = '自瞄距离',
     Default = aimSettings.maxDistance,
@@ -5043,141 +5033,117 @@ g:AddSlider('LockTime', {
     end
 })
 
-local function Noaimbot(state)
-    johnaim = state
-    if game:GetService("Players").LocalPlayer.Character.Name ~= "Noli" and state then
-        Library:Notify("角色不对，可能出现错误", nil, 4590657391)
-        return 
-    end
-    if state then
-        Noloop = game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.ChildAdded:Connect(function(child)
-            if not johnaim then return end
-            for _, v in pairs(aimbotNoilsounds) do
-                if child.Name == v then
-                   
-                    local survivors = {}
-                    for _, player in pairs(game:GetService("Players"):GetPlayers()) do
-                        if player ~= game:GetService("Players").LocalPlayer then
-                            local character = player.Character
-                            if character and character:FindFirstChild("HumanoidRootPart") then
-                                table.insert(survivors, character)
-                            end
-                        end
-                    end
-    
-                   
-                    local nearestSurvivor = nil
-                    local shortestDistance = math.huge  
-                    
-                    for _, survivor in pairs(survivors) do
-                        local survivorHRP = survivor.HumanoidRootPart
-                        local playerHRP = game:GetService("Players").LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        
-                        if playerHRP then
-                            local distance = (survivorHRP.Position - playerHRP.Position).Magnitude
-                            if distance < shortestDistance and distance <= aimSettings.maxDistance then
-                                shortestDistance = distance
-                                nearestSurvivor = survivor
-                            end
-                        end
-                    end
-                    
-                  
-                    if nearestSurvivor then
-                        local nearestHRP = nearestSurvivor.HumanoidRootPart
-                        local playerHRP = game:GetService("Players").LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        local maxIterations = math.floor(aimSettings.lockTime / 0.01)  -- Convert seconds to iterations
-                        if playerHRP then
-                            local direction = (nearestHRP.Position - playerHRP.Position).Unit
-                            local num = 1
-                           
-                            while num <= maxIterations do
-                                task.wait(0.01)
-                                num = num + 1
-                                workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, nearestHRP.Position)
-                                playerHRP.CFrame = CFrame.lookAt(playerHRP.Position, Vector3.new(nearestHRP.Position.X, nearestHRP.Position.Y, nearestHRP.Position.Z))
-                            end
-                        end
+local function SmoothLookAt(currentCF, targetPos, smoothness)
+    local targetLook = (targetPos - currentCF.Position).Unit
+    local currentLook = currentCF.LookVector
+    local newLook = currentLook:Lerp(targetLook, 1 / smoothness)
+    return CFrame.lookAt(currentCF.Position, currentCF.Position + newLook * 100)
+end
+
+local function getNearestSurvivor()
+    local player = game.Players.LocalPlayer
+    local nearest, nearestDist = nil, math.huge
+    for _, p in ipairs(game.Players:GetPlayers()) do
+        if p ~= player then
+            local char = p.Character
+            if char and char:FindFirstChild("HumanoidRootPart") then
+                local myHRP = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+                if myHRP then
+                    local dist = (char.HumanoidRootPart.Position - myHRP.Position).Magnitude
+                    if dist < nearestDist and dist <= aimSettings.maxDistance then
+                        nearestDist = dist
+                        nearest = char
                     end
                 end
             end
-        end)
-    else
-        if Noloop then
-            Noloop:Disconnect()
-            Noloop = nil
         end
     end
+    return nearest
+end
+
+local function executeAim()
+    local player = game.Players.LocalPlayer
+    local target = getNearestSurvivor()
+    if not target or not target:FindFirstChild("HumanoidRootPart") then return end
+    local myHRP = player.Character and player.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return end
+    local smoothness = 30
+    local maxIterations = math.floor(aimSettings.lockTime / 0.016)
+    local iterations = 0
+    local conn
+    conn = game:GetService("RunService").RenderStepped:Connect(function()
+        iterations = iterations + 1
+        if iterations <= maxIterations then
+            if myHRP and myHRP.Parent and target.Parent then
+                local currentCF = myHRP.CFrame
+                local targetPos = target.HumanoidRootPart.Position
+                myHRP.CFrame = SmoothLookAt(currentCF, targetPos, smoothness)
+                workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, targetPos)
+            else
+                conn:Disconnect()
+            end
+        else
+            conn:Disconnect()
+        end
+    end)
+end
+
+local function Noaimbot(state)
+    if Noloop then Noloop:Disconnect() end
+    if not state then
+        Noloop = nil
+        return
+    end
+    local player = game.Players.LocalPlayer
+    if player.Character and player.Character.Name ~= "Noli" then
+        Library:Notify("角色不对，可能出现错误", nil, 4590657391)
+        return
+    end
+    local character = player.Character
+    if not character then
+        player.CharacterAdded:Wait()
+        character = player.Character
+    end
+    Noloop = character.DescendantAdded:Connect(function(descendant)
+        if descendant:IsA("Sound") then
+            for _, soundId in ipairs(aimbotNoilsounds) do
+                if descendant.SoundId == soundId then
+                    executeAim()
+                    break
+                end
+            end
+        end
+    end)
 end
 
 local function No2aimbot(state)
-    johnaim = state
-    if game:GetService("Players").LocalPlayer.Character.Name ~= "Noli" and state then
-        Library:Notify("角色不对，可能出现错误", nil, 4590657391)
-        return 
+    if No2loop then No2loop:Disconnect() end
+    if not state then
+        No2loop = nil
+        return
     end
-    if state then
-        No2loop = game:GetService("Players").LocalPlayer.Character.HumanoidRootPart.ChildAdded:Connect(function(child)
-            if not johnaim then return end
-            for _, v in pairs(aimbotNoilsounds2) do
-                if child.Name == v then
-                   
-                    local survivors = {}
-                    for _, player in pairs(game:GetService("Players"):GetPlayers()) do
-                        if player ~= game:GetService("Players").LocalPlayer then
-                            local character = player.Character
-                            if character and character:FindFirstChild("HumanoidRootPart") then
-                                table.insert(survivors, character)
-                            end
-                        end
-                    end
-    
-                   
-                    local nearestSurvivor = nil
-                    local shortestDistance = math.huge  
-                    
-                    for _, survivor in pairs(survivors) do
-                        local survivorHRP = survivor.HumanoidRootPart
-                        local playerHRP = game:GetService("Players").LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        
-                        if playerHRP then
-                            local distance = (survivorHRP.Position - playerHRP.Position).Magnitude
-                            if distance < shortestDistance and distance <= aimSettings.maxDistance then
-                                shortestDistance = distance
-                                nearestSurvivor = survivor
-                            end
-                        end
-                    end
-                    
-                  
-                    if nearestSurvivor then
-                        local nearestHRP = nearestSurvivor.HumanoidRootPart
-                        local playerHRP = game:GetService("Players").LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        local maxIterations = math.floor(aimSettings.lockTime / 0.01)  -- Convert seconds to iterations
-                        if playerHRP then
-                            local direction = (nearestHRP.Position - playerHRP.Position).Unit
-                            local num = 1
-                           
-                            while num <= maxIterations do
-                                task.wait(0.01)
-                                num = num + 1
-                                workspace.CurrentCamera.CFrame = CFrame.new(workspace.CurrentCamera.CFrame.Position, nearestHRP.Position)
-                                playerHRP.CFrame = CFrame.lookAt(playerHRP.Position, Vector3.new(nearestHRP.Position.X, nearestHRP.Position.Y, nearestHRP.Position.Z))
-                            end
-                        end
-                    end
+    local player = game.Players.LocalPlayer
+    if player.Character and player.Character.Name ~= "Noli" then
+        Library:Notify("角色不对，可能出现错误", nil, 4590657391)
+        return
+    end
+    local character = player.Character
+    if not character then
+        player.CharacterAdded:Wait()
+        character = player.Character
+    end
+    No2loop = character.DescendantAdded:Connect(function(descendant)
+        if descendant:IsA("Sound") then
+            for _, soundId in ipairs(aimbotNoilsounds2) do
+                if descendant.SoundId == soundId then
+                    executeAim()
+                    break
                 end
             end
-        end)
-    else
-        if No2loop then
-            No2loop:Disconnect()
-            No2loop = nil
         end
-    end
+    end)
 end
 
--- Add toggles to the groupbox
 g:AddToggle('NoilStarBomb', {
     Text = 'Noil星炸弹自瞄',
     Default = false,
