@@ -4870,44 +4870,50 @@ local aimDurationSettings = {
 }
 local targetSoundId = "rbxassetid://99281727182505"
 
-SpecialAimbot:AddSlider("GAA_Distance", {
-    Text = "访客自瞄距离",
-    Default = defaultAimDistance,
-    Min = 10,
-    Max = 500,
-    Rounding = 1,
-    Callback = function(value)
-        aimDistanceSettings.GAA = value
-    end
-})
-SpecialAimbot:AddSlider("GAA_Smoothness", {
-    Text = "相机平滑度",
-    Default = aimSmoothnessSettings.GAA,
-    Min = 5,
-    Max = 100,
-    Rounding = 1,
-    Callback = function(value)
-        aimSmoothnessSettings.GAA = value
-    end
-})
-SpecialAimbot:AddSlider("GAA_Duration", {
-    Text = "相机锁定持续时间(帧)",
-    Default = aimDurationSettings.GAA,
-    Min = 10,
-    Max = 200,
-    Rounding = 1,
-    Callback = function(value)
-        aimDurationSettings.GAA = value
-    end
-})
-SpecialAimbot:AddTextbox("GuestSoundId", {
-    Text = "触发音效ID",
-    Default = targetSoundId,
-    Placeholder = "rbxassetid://99281727182505",
-    Callback = function(value)
-        targetSoundId = value
-    end
-})
+if not SpecialAimbot then
+    SpecialAimbot = Tabs.Aimbot or Tabs.zdg or Tabs
+end
+
+if SpecialAimbot then
+    SpecialAimbot:AddSlider("GAA_Distance", {
+        Text = "访客自瞄距离",
+        Default = defaultAimDistance,
+        Min = 10,
+        Max = 500,
+        Rounding = 1,
+        Callback = function(value)
+            aimDistanceSettings.GAA = value
+        end
+    })
+    SpecialAimbot:AddSlider("GAA_Smoothness", {
+        Text = "相机平滑度",
+        Default = aimSmoothnessSettings.GAA,
+        Min = 5,
+        Max = 100,
+        Rounding = 1,
+        Callback = function(value)
+            aimSmoothnessSettings.GAA = value
+        end
+    })
+    SpecialAimbot:AddSlider("GAA_Duration", {
+        Text = "相机锁定持续时间(帧)",
+        Default = aimDurationSettings.GAA,
+        Min = 10,
+        Max = 200,
+        Rounding = 1,
+        Callback = function(value)
+            aimDurationSettings.GAA = value
+        end
+    })
+    SpecialAimbot:AddTextbox("GuestSoundId", {
+        Text = "触发音效ID",
+        Default = targetSoundId,
+        Placeholder = "rbxassetid://99281727182505",
+        Callback = function(value)
+            targetSoundId = value
+        end
+    })
+end
 
 local function SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
     local targetLook = (targetPos - currentCamCF.Position).Unit
@@ -4917,13 +4923,18 @@ local function SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
 end
 
 local function getNearestKiller()
-    local killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
+    local players = workspace:FindFirstChild("Players")
+    local killersFolder = players and players:FindFirstChild("Killers")
     if not killersFolder then
         killersFolder = workspace:FindFirstChild("Killers")
     end
-    if not killersFolder then return nil end
+    if not killersFolder then
+        return nil
+    end
     local myHRP = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then return nil end
+    if not myHRP then
+        return nil
+    end
     local nearest, nearestDist = nil, math.huge
     for _, killer in ipairs(killersFolder:GetChildren()) do
         if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
@@ -4937,9 +4948,17 @@ local function getNearestKiller()
     return nearest
 end
 
+local activeAimConnection = nil
+
 local function executeAim()
+    if activeAimConnection then
+        activeAimConnection:Disconnect()
+        activeAimConnection = nil
+    end
     local targetKiller = getNearestKiller()
-    if not targetKiller or not targetKiller:FindFirstChild("HumanoidRootPart") then return end
+    if not targetKiller or not targetKiller:FindFirstChild("HumanoidRootPart") then
+        return
+    end
     local smoothness = aimSmoothnessSettings.GAA
     local duration = aimDurationSettings.GAA
     local iterations = 0
@@ -4952,8 +4971,12 @@ local function executeAim()
             workspace.CurrentCamera.CFrame = SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
         else
             conn:Disconnect()
+            if activeAimConnection == conn then
+                activeAimConnection = nil
+            end
         end
     end)
+    activeAimConnection = conn
 end
 
 local aimConnection = nil
@@ -4962,7 +4985,13 @@ local function setupGuestAim(enabled)
         aimConnection:Disconnect()
         aimConnection = nil
     end
-    if not enabled then return end
+    if not enabled then
+        if activeAimConnection then
+            activeAimConnection:Disconnect()
+            activeAimConnection = nil
+        end
+        return
+    end
     local player = game.Players.LocalPlayer
     local character = player.Character
     if not character then
@@ -4980,13 +5009,15 @@ local function setupGuestAim(enabled)
     aimConnection = character.DescendantAdded:Connect(onSoundAdded)
 end
 
-SpecialAimbot:AddToggle("GuestAimToggle", {
-    Text = "访客相机自瞄",
-    Default = false,
-    Callback = function(v)
-        setupGuestAim(v)
-    end
-})
+if SpecialAimbot then
+    SpecialAimbot:AddToggle("GuestAimToggle", {
+        Text = "访客相机自瞄",
+        Default = false,
+        Callback = function(v)
+            setupGuestAim(v)
+        end
+    })
+end
 
 local aimbotNoilsounds = {
     "rbxassetid://90382006346718"
