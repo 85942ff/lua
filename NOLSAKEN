@@ -4724,158 +4724,22 @@ SB:AddToggle('MyToggle', {
     Callback = TWO
 })
 
-local LeftGroupBox = Tabs.Aimbot:AddRightGroupbox('1x4远程预判')
-
-local RunService = game:GetService("RunService")
-local LocalPlayer = game:GetService("Players").LocalPlayer
-local PredictionAim = {
-    Enabled = false,
-    Prediction = 4,
-    Duration = 1.7,
-    Targets = { "Guest1337", "007n7", "Builderman", "Chance", "Dusekkar", "Elliot", "Noob", "Shedletsky", "Taph", "TwoTime" },
-    TrackedAnimations = {
-        ["131530909428809"] = true,
-        ["122225989492265"] = true,
-        ["115542328123604"] = true,
-        ["105750427213215"] = true,
-        ["108009371791486"] = true
-    },
-    Humanoid = nil,
-    HRP = nil,
-    LastTriggerTime = 1,
-    IsAiming = false,
-    OriginalState = nil
-}
-
-local function CreateUI()
-    LeftGroupBox:AddToggle("AimToggle", {
-        Text = "预判瞄准",
-        Default = false,
-        Callback = function(Value)
-            PredictionAim.Enabled = Value
-        end,
-    })
-    LeftGroupBox:AddSlider("PredictionSlider", {
-        Text = "预判强度",
-        Default = 4,
-        Min = 0,
-        Max = 15,
-        Rounding = 1,
-        Callback = function(Value)
-            PredictionAim.Prediction = Value
-        end,
-    })
-end
-
-local function getClosestTarget()
-    local killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
-    if not killersFolder then return nil end
-    local myHRP = PredictionAim.HRP
-    if not myHRP then return nil end
-    local closest, closestDist = nil, math.huge
-    for _, targetName in ipairs(PredictionAim.Targets) do
-        local target = killersFolder:FindFirstChild(targetName)
-        if target and target:FindFirstChild("HumanoidRootPart") then
-            local targetHRP = target.HumanoidRootPart
-            local dist = (targetHRP.Position - myHRP.Position).Magnitude
-            if dist < closestDist then
-                closestDist = dist
-                closest = targetHRP
-            end
-        end
-    end
-    return closest
-end
-
-local function getPlayingAnimationIds()
-    local ids = {}
-    if PredictionAim.Humanoid then
-        for _, track in ipairs(PredictionAim.Humanoid:GetPlayingAnimationTracks()) do
-            if track.Animation and track.Animation.AnimationId then
-                local id = track.Animation.AnimationId:match("%d+")
-                if id then ids[id] = true end
-            end
-        end
-    end
-    return ids
-end
-
-local function setupCharacter(char)
-    PredictionAim.Humanoid = char:WaitForChild("Humanoid")
-    PredictionAim.HRP = char:WaitForChild("HumanoidRootPart")
-end
-
-local function OnRenderStep()
-    if not PredictionAim.Enabled or not PredictionAim.Humanoid or not PredictionAim.HRP then return end
-    local playing = getPlayingAnimationIds()
-    local triggered = false
-    for id in pairs(PredictionAim.TrackedAnimations) do
-        if playing[id] then
-            triggered = true
-            break
-        end
-    end
-
-    if triggered then
-        PredictionAim.LastTriggerTime = tick()
-        PredictionAim.IsAiming = true
-    end
-
-    if PredictionAim.IsAiming and tick() - PredictionAim.LastTriggerTime <= PredictionAim.Duration then
-        if not PredictionAim.OriginalState then
-            PredictionAim.OriginalState = {
-                WalkSpeed = PredictionAim.Humanoid.WalkSpeed,
-                JumpPower = PredictionAim.Humanoid.JumpPower,
-                AutoRotate = PredictionAim.Humanoid.AutoRotate
-            }
-            PredictionAim.Humanoid.AutoRotate = false
-            PredictionAim.HRP.AssemblyAngularVelocity = Vector3.zero
-        end
-        local targetHRP = getClosestTarget()
-        if targetHRP then
-            local velocity = targetHRP.AssemblyLinearVelocity or Vector3.zero
-            local predictedPos = targetHRP.Position + (velocity * PredictionAim.Prediction / 10)
-            local direction = (predictedPos - PredictionAim.HRP.Position).Unit
-            local yRot = math.atan2(-direction.X, -direction.Z)
-            PredictionAim.HRP.CFrame = CFrame.new(PredictionAim.HRP.Position) * CFrame.Angles(0, yRot, 0)
-        end
-    elseif PredictionAim.IsAiming then
-        PredictionAim.IsAiming = false
-        if PredictionAim.OriginalState then
-            PredictionAim.Humanoid.WalkSpeed = PredictionAim.OriginalState.WalkSpeed
-            PredictionAim.Humanoid.JumpPower = PredictionAim.OriginalState.JumpPower
-            PredictionAim.Humanoid.AutoRotate = PredictionAim.OriginalState.AutoRotate
-            PredictionAim.OriginalState = nil
-        end
-    end
-end
-
-if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(setupCharacter)
-CreateUI()
-RunService.RenderStepped:Connect(OnRenderStep)
-
 local SpecialAimbot = Tabs.Aimbot:AddLeftGroupbox("幸存者自瞄(无声静默)")
 
 -- 默认距离设置
-local defaultAimDistance = 100
-local aimDistanceSettings = {
-    GAA = defaultAimDistance
-}
-local aimSmoothnessSettings = {
-    GAA = 20
-}
-local aimDurationSettings = {
-    GAA = 25
-}
-local targetSoundId = "rbxassetid://99281727182505"
-
-if not SpecialAimbot then
-    SpecialAimbot = Tabs.Aimbot or Tabs.zdg or Tabs
+local aimbotGroup = SpecialAimbot or Tabs.Aimbot or Tabs.zdg or Tabs
+if not aimbotGroup then
+    error("无法找到 UI 群组，请检查你的 UI 框架变量名")
 end
 
-if SpecialAimbot then
-    SpecialAimbot:AddSlider("GAA_Distance", {
+local defaultAimDistance = 100
+local aimDistanceSettings = { GAA = defaultAimDistance }
+local aimSmoothnessSettings = { GAA = 20 }
+local aimDurationSettings = { GAA = 25 }
+local targetSoundId = "rbxassetid://99281727182505"
+
+pcall(function()
+    aimbotGroup:AddSlider("GAA_Distance", {
         Text = "访客自瞄距离",
         Default = defaultAimDistance,
         Min = 10,
@@ -4885,7 +4749,9 @@ if SpecialAimbot then
             aimDistanceSettings.GAA = value
         end
     })
-    SpecialAimbot:AddSlider("GAA_Smoothness", {
+end)
+pcall(function()
+    aimbotGroup:AddSlider("GAA_Smoothness", {
         Text = "相机平滑度",
         Default = aimSmoothnessSettings.GAA,
         Min = 5,
@@ -4895,7 +4761,9 @@ if SpecialAimbot then
             aimSmoothnessSettings.GAA = value
         end
     })
-    SpecialAimbot:AddSlider("GAA_Duration", {
+end)
+pcall(function()
+    aimbotGroup:AddSlider("GAA_Duration", {
         Text = "相机锁定持续时间(帧)",
         Default = aimDurationSettings.GAA,
         Min = 10,
@@ -4905,7 +4773,9 @@ if SpecialAimbot then
             aimDurationSettings.GAA = value
         end
     })
-    SpecialAimbot:AddTextbox("GuestSoundId", {
+end)
+pcall(function()
+    aimbotGroup:AddTextBox("GuestSoundId", {
         Text = "触发音效ID",
         Default = targetSoundId,
         Placeholder = "rbxassetid://99281727182505",
@@ -4913,7 +4783,7 @@ if SpecialAimbot then
             targetSoundId = value
         end
     })
-end
+end)
 
 local function SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
     local targetLook = (targetPos - currentCamCF.Position).Unit
@@ -4928,13 +4798,9 @@ local function getNearestKiller()
     if not killersFolder then
         killersFolder = workspace:FindFirstChild("Killers")
     end
-    if not killersFolder then
-        return nil
-    end
+    if not killersFolder then return nil end
     local myHRP = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if not myHRP then
-        return nil
-    end
+    if not myHRP then return nil end
     local nearest, nearestDist = nil, math.huge
     for _, killer in ipairs(killersFolder:GetChildren()) do
         if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
@@ -5009,15 +4875,17 @@ local function setupGuestAim(enabled)
     aimConnection = character.DescendantAdded:Connect(onSoundAdded)
 end
 
-if SpecialAimbot then
-    SpecialAimbot:AddToggle("GuestAimToggle", {
+pcall(function()
+    aimbotGroup:AddToggle("GuestAimToggle", {
         Text = "访客相机自瞄",
         Default = false,
         Callback = function(v)
             setupGuestAim(v)
         end
     })
-end
+end)
+
+print("访客自瞄脚本已加载，当前触发音效ID: " .. targetSoundId)
 
 local aimbotNoilsounds = {
     "rbxassetid://90382006346718"
