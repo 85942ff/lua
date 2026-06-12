@@ -10,10 +10,9 @@ Library.ShowCustomCursor = true
 Library.NotifySide = "Right"
 
 local Window = Library:CreateWindow({
-	Title = ' 被遗弃 | NOLSAKEN',
+	Title = ' 永恒被遗弃 | NOLSAKEN',
 	Footer = "ざん こゆき - 永恒被遗弃NOLSAKEN67 Team",
-    Icon = 134543491994706,
-	Center = true,
+    Center = true,
 	AutoShow = true,
 	Resizable = true,
 	ShowCustomCursor = true,
@@ -4724,7 +4723,7 @@ SB:AddToggle('MyToggle', {
     Callback = TWO
 })
 
-local SpecialAimbot = Tabs.Aimbot:AddLeftGroupbox("幸存者自瞄(无声静默)")
+local SpecialAimbot = Tabs.Aimbot:AddLeftGroupbox("访客自瞄")
 
 -- 默认距离设置
 local aimbotGroup = SpecialAimbot or Tabs.Aimbot or Tabs.zdg or Tabs
