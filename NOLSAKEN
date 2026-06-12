@@ -1427,6 +1427,8 @@ local config_114514 = {
     PingCompensation = 0.15,
     FastKillerAdjust = 1.5,
     ReactionBoost = 1.2,
+    UseSimplePrediction = true,
+    SimplePredictAmount = 2,
     TargetSoundIds = {
         "123477889355308", "95663148345791", "127888010680034", "83839785421475",
         "108126743447938", "102634421621341", "128329896103227", "99083423091969",
@@ -1651,29 +1653,33 @@ pcall(function()
     end
     
     local function GetTotalDetectionRange(killer)
-        local base = config_114514.BaseDistance
-        local moveBonus = GetMoveCompensation()
-        local predict = 0
-        local pingBonus = GetPingCompensation() * 8
-        local reactionBoost = config_114514.ReactionBoost
+        if config_114514.UseSimplePrediction then
+            return config_114514.BaseDistance + config_114514.SimplePredictAmount
+        else
+            local base = config_114514.BaseDistance
+            local moveBonus = GetMoveCompensation()
+            local predict = 0
+            local pingBonus = GetPingCompensation() * 8
+            local reactionBoost = config_114514.ReactionBoost
 
-        if config_114514.EnablePrediction and killer and killer:FindFirstChild("HumanoidRootPart") then
-            local killerVel = killer.HumanoidRootPart.Velocity
-            local killerSpeed = math.sqrt(killerVel.X^2 + killerVel.Y^2 + killerVel.Z^2)
-            
-            if killerSpeed > config_114514.SpeedThreshold then
-                predict = math.min(
-                    config_114514.PredictMax, 
-                    config_114514.PredictBase + (killerSpeed * config_114514.PredictFactor)
-                )
+            if config_114514.EnablePrediction and killer and killer:FindFirstChild("HumanoidRootPart") then
+                local killerVel = killer.HumanoidRootPart.Velocity
+                local killerSpeed = math.sqrt(killerVel.X^2 + killerVel.Y^2 + killerVel.Z^2)
+                
+                if killerSpeed > config_114514.SpeedThreshold then
+                    predict = math.min(
+                        config_114514.PredictMax, 
+                        config_114514.PredictBase + (killerSpeed * config_114514.PredictFactor)
+                    )
+                end
+                
+                if IsFastKiller(killer) then
+                    predict = predict * config_114514.FastKillerAdjust
+                end
             end
             
-            if IsFastKiller(killer) then
-                predict = predict * config_114514.FastKillerAdjust
-            end
+            return (base + moveBonus + predict + pingBonus) * reactionBoost
         end
-        
-        return (base + moveBonus + predict + pingBonus) * reactionBoost
     end
     
     local function IsTargetingMe(killer)
@@ -1820,13 +1826,45 @@ pcall(function()
     })
     
     ZZ2:AddSlider("BaseDistance", {
-        Text = "距离",
+        Text = "基础距离",
         Default = 16,
         Min = 5,
         Max = 30,
         Rounding = 1,
         Callback = function(value)
             config_114514.BaseDistance = value
+            print(string.format("基础距离已设为 %.1fm | 当前总检测范围: %.1fm", value, GetTotalDetectionRange(nil)))
+        end
+    })
+    
+    ZZ2:AddToggle("SimplePredictionToggle", {
+        Text = "启用简单预判",
+        Default = true,
+        Callback = function(enabled)
+            config_114514.UseSimplePrediction = enabled
+            print(enabled and "已切换为简单预判模式" or "已切换为复杂预测模式")
+            print(string.format("当前总检测范围: %.1fm", GetTotalDetectionRange(nil)))
+        end
+    })
+    
+    ZZ2:AddSlider("SimplePredictAmount", {
+        Text = "简单预判距离",
+        Default = 2,
+        Min = 0,
+        Max = 10,
+        Rounding = 1,
+        Callback = function(value)
+            config_114514.SimplePredictAmount = value
+            print(string.format("简单预判距离已设为 %.1fm | 当前总检测范围: %.1fm", value, GetTotalDetectionRange(nil)))
+        end
+    })
+    
+    ZZ2:AddToggle("ComplexPredictionToggle", {
+        Text = "启用复杂预测",
+        Default = false,
+        Callback = function(enabled)
+            config_114514.EnablePrediction = enabled
+            print(enabled and "复杂预测已启用" or "复杂预测已禁用")
         end
     })
     
@@ -1868,7 +1906,7 @@ pcall(function()
     end)
 end)
 
-local PunchBox = Tabs.zdg:AddLeftGroupbox('自动拳击')
+local PunchBox = Tabs.zdg:AddLeftGroupbox('自动拳击（智能检测）')
 
 local punchConfig = {
     Enabled = false,
@@ -1995,6 +2033,12 @@ PunchBox:AddSlider("PunchAngle", {
     Max = 180,
     Rounding = 1,
     Callback = function(v) punchConfig.Angle = v end
+})
+
+PunchBox:AddToggle("PunchSoundDetection", {
+    Text = "声音检测（仅对指定声音ID出拳）",
+    Default = true,
+    Callback = function(v) punchConfig.UseSoundDetection = v end
 })
 
 local Generator = Tabs.zdx:AddLeftGroupbox("自动修机")
