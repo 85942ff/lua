@@ -4868,6 +4868,7 @@ local aimSmoothnessSettings = {
 local aimDurationSettings = {
     GAA = 25
 }
+local targetSoundId = "rbxassetid://99281727182505"
 
 SpecialAimbot:AddSlider("GAA_Distance", {
     Text = "访客自瞄距离",
@@ -4897,6 +4898,14 @@ SpecialAimbot:AddSlider("GAA_Duration", {
     Rounding = 1,
     Callback = function(value)
         aimDurationSettings.GAA = value
+    end
+})
+SpecialAimbot:AddTextbox("GuestSoundId", {
+    Text = "触发音效ID",
+    Default = targetSoundId,
+    Placeholder = "rbxassetid://99281727182505",
+    Callback = function(value)
+        targetSoundId = value
     end
 })
 
@@ -4960,23 +4969,9 @@ local function setupGuestAim(enabled)
         player.CharacterAdded:Wait()
         character = player.Character
     end
-    local targetSoundIds = {
-        ["124900635250184"] = true, ["124900635250184"] = true, ["124900635250184"] = true,
-        ["124900635250184"] = true, ["124900635250184"] = true, ["124900635250184"] = true,
-        ["124900635250184"] = true, ["124900635250184"] = true, ["124900635250184"] = true,
-        ["124900635250184"] = true, ["124900635250184"] = true, ["124900635250184"] = true,
-    }
     local function onSoundAdded(sound)
-        if sound:IsA("Sound") then
-            local soundId = tostring(sound.SoundId)
-            local numericId = soundId:match("(%d+)$")
-            if numericId and targetSoundIds[numericId] then
-                executeAim()
-                return
-            end
-            if soundId:find("Punch") or soundId:find("拳") or sound.Name:find("Punch") then
-                executeAim()
-            end
+        if sound:IsA("Sound") and sound.SoundId == targetSoundId then
+            executeAim()
         end
     end
     for _, child in ipairs(character:GetDescendants()) do
