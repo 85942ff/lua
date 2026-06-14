@@ -2311,6 +2311,48 @@ GeneratorGroup:AddButton({
 
 print("[Obsidian UI] 自动快速发电机模块已加载")
 
+if Tabs.zdx then
+    local instantGroup = Tabs.zdx:AddLeftGroupbox("秒互动")
+    local instantInteractRunning = false
+    local instantInteractThread = nil
+    local instantInteractConn = nil
+
+    local function startInstantInteract()
+        if instantInteractRunning then return end
+        instantInteractRunning = true
+        local promptService = game:GetService("ProximityPromptService")
+        instantInteractConn = promptService.PromptButtonHoldBegan:Connect(function(prompt)
+            prompt.HoldDuration = 0
+        end)
+        instantInteractThread = task.spawn(function()
+            while instantInteractRunning do
+                for _, prompt in next, workspace:GetDescendants() do
+                    if prompt:IsA("ProximityPrompt") then
+                        prompt.HoldDuration = 0
+                    end
+                end
+                task.wait(1)
+            end
+        end)
+    end
+
+    local function stopInstantInteract()
+        instantInteractRunning = false
+        if instantInteractThread then task.cancel(instantInteractThread); instantInteractThread = nil end
+        if instantInteractConn then instantInteractConn:Disconnect(); instantInteractConn = nil end
+    end
+
+    instantGroup:AddToggle("InstantInteractToggle", {
+        Text = "秒互动",
+        Default = false,
+        Callback = function(state)
+            if state then startInstantInteract() else stopInstantInteract() end
+        end
+    })
+else
+    warn("修机标签页不存在，无法添加秒互动")
+end
+
 local KillerSurvival = Tabs.zdx:AddRightGroupbox('传送修机[危险]')
 
 KillerSurvival:AddButton({
@@ -6808,6 +6850,68 @@ FunGroup:AddSlider("JumpDistance", {
     end,
     Tooltip = "调节后空翻的跳跃距离",
 })
+
+if Tabs.yul then
+    local invisGroup = Tabs.yul:AddLeftGroupbox("隐身")
+    local invisibilityRunning = false
+    local invisibilityThread = nil
+    local currentInvisAnim = nil
+    local invisAnimId = "75804462760596"
+
+    local function startInvisibility()
+        if invisibilityRunning then return end
+        local player = game.Players.LocalPlayer
+        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if not humanoid or humanoid.RigType ~= Enum.HumanoidRigType.R6 then
+            warn("隐身仅支持 R6 角色")
+            return
+        end
+        invisibilityRunning = true
+        invisibilityThread = task.spawn(function()
+            while invisibilityRunning do
+                local anim = Instance.new("Animation")
+                anim.AnimationId = "rbxassetid://" .. invisAnimId
+                local loadedAnim = humanoid:LoadAnimation(anim)
+                currentInvisAnim = loadedAnim
+                loadedAnim.Looped = false
+                loadedAnim:Play()
+                loadedAnim:AdjustSpeed(0)
+                task.wait(0.000001)
+            end
+        end)
+    end
+
+    local function stopInvisibility()
+        invisibilityRunning = false
+        if invisibilityThread then task.cancel(invisibilityThread); invisibilityThread = nil end
+        if currentInvisAnim then
+            currentInvisAnim:Stop()
+            currentInvisAnim = nil
+        end
+        local player = game.Players.LocalPlayer
+        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+        if humanoid then
+            for _, track in pairs(humanoid:GetPlayingAnimationTracks()) do
+                track:AdjustSpeed(100000)
+            end
+        end
+        local animateScript = player.Character and player.Character:FindFirstChild("Animate")
+        if animateScript then
+            animateScript.Disabled = true
+            animateScript.Disabled = false
+        end
+    end
+
+    invisGroup:AddToggle("InvisibilityToggle", {
+        Text = "隐身",
+        Default = false,
+        Callback = function(state)
+            if state then startInvisibility() else stopInvisibility() end
+        end
+    })
+else
+    warn("娱乐功能标签页不存在，无法添加隐身")
+end
 
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Debug")
 
