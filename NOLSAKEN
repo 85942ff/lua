@@ -1018,7 +1018,6 @@ MVP2:AddSlider('MySlider4', {
     end
 })
 
-
 getgenv().RS = game:GetService("ReplicatedStorage")
 getgenv().TS = game:GetService("TweenService")
 getgenv().RSvc = game:GetService("RunService")
@@ -1353,11 +1352,11 @@ end)
 
 local ZZ = Tabs.zdg:AddLeftGroupbox('Guest 1337自动格挡V2')
 
-ZZ:AddToggle("AutoBlockToggle", {
+ZZ:AddToggle("AutoBlockMasterToggle", {
     Text = "自动格挡",
     Default = false,
-    Callback = function(state)
-        AutoBlockEnabled = state
+    Callback = function(v)
+        getgenv().AutoBlockEnabled = v
     end
 })
 
@@ -1399,617 +1398,326 @@ ZZ:AddDropdown("FacingMode", {
     end
 })
 
-local ZZ2 = Tabs.zdg:AddLeftGroupbox('自动格挡[Guest 1337]')
+local SimpleCoreGroup = Tabs.zdg:AddLeftGroupbox('Guest1337自动格挡')
+local SimpleParamGroup = Tabs.zdg:AddRightGroupbox('参数调节')
 
-local config_114514 = {
-    Enabled = false,
-    BaseDistance = 16,
-    ScanInterval = 0.0005,
-    BlockCooldown = 0,
-    MoveCompBase = 1.8,
-    MoveCompFactor = 0.3,
-    SpeedThreshold = 6,
-    PredictBase = 5,
-    PredictMax = 15,
-    PredictFactor = 0.45,
-    TargetAngle = 50,
-    MinAttackSpeed = 10,
-    ShowVisualization = false,
-    EnablePrediction = false,
-    PingCompensation = 0.15,
-    FastKillerAdjust = 1.5,
-    ReactionBoost = 1.2,
-    UseSimplePrediction = true,
-    SimplePredictAmount = 2,
-    TargetSoundIds = {
-        "123477889355308", "95663148345791", "127888010680034", "83839785421475",
-        "108126743447938", "102634421621341", "128329896103227", "99083423091969",
-        "83602877144808", "135167066811253", "134416296817455", "103134967997859"
-    },
-    TargetAnimIds = {
-        "82766292406776", "128763023821409", "75886957408638", "119114307046769",
-        "79935632537639", "115822216957588", "109664483649841", "82561719951163",
-        "90562829487800", "108805867834084", "131170650740600"
-    }
-}
-
-pcall(function()
-    local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local RunService = game:GetService("RunService")
-    local Stats = game:GetService("Stats")
-    
-    local soundLookup = {}
-    for _, id in ipairs(config_114514.TargetSoundIds) do
-        soundLookup[id] = true
-        soundLookup["rbxassetid://" .. id] = true
-    end
-    
-    local animLookup = {}
-    for _, id in ipairs(config_114514.TargetAnimIds) do
-        animLookup[id] = true
-        animLookup["rbxassetid://" .. id] = true
-    end
-    
-    local LocalPlayer = Players.LocalPlayer
-    local lastBlockTime = 0
-    local combatConnection = nil
-    local lastScanTime = 0
-    local visualizationParts = {}
-    local lastPingCheck = 0
-    local currentPing = 0
-    local threatCache = {}
-    local lastThreatUpdate = 0
-    
-    local function GetPing()
-        local currentTime = os.clock()
-        if currentTime - lastPingCheck < 0.3 then
-            return currentPing
+do
+    local autoPunchState = { enabled = false, remoteEvent = nil, isRunning = false, task = nil }
+    local function startAutoPunch()
+        if autoPunchState.isRunning then return end
+        autoPunchState.isRunning = true
+        if not autoPunchState.remoteEvent then
+            autoPunchState.remoteEvent = game:GetService("ReplicatedStorage").Modules.Network.Network.RemoteEvent
+            if not autoPunchState.remoteEvent then autoPunchState.isRunning = false return end
         end
-        lastPingCheck = currentTime
-        
-        local stats = Stats and Stats.Network and Stats.Network:FindFirstChild("ServerStatsItem")
-        if stats then
-            local pingStat = stats:FindFirstChild("Data Ping")
-            if pingStat then
-                currentPing = pingStat.Value
-                return currentPing
+        autoPunchState.task = task.spawn(function()
+            while autoPunchState.enabled do
+                autoPunchState.remoteEvent:FireServer("UseActorAbility", {buffer.fromstring("\3\5\0\0\0Punch")})
+                task.wait(0.5)
             end
-        end
-        
-        return 0
-    end
-    
-    local function GetPingCompensation()
-        local ping = GetPing()
-        return math.min(0.4, ping / 1000 * config_114514.PingCompensation * 12)
-    end
-    
-    local function CreateVisualization()
-        if not LocalPlayer.Character then return end
-        local rootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not rootPart then return end
-        
-        for _, part in ipairs(visualizationParts) do
-            part:Destroy()
-        end
-        visualizationParts = {}
-        
-        local center = rootPart.Position
-        local distance = config_114514.BaseDistance
-        local angle = math.rad(config_114514.TargetAngle)
-        local segments = 36
-        
-        local centerSphere = Instance.new("Part")
-        centerSphere.Size = Vector3.new(1, 1, 1)
-        centerSphere.Position = center + Vector3.new(0, 0.5, 0)
-        centerSphere.Shape = Enum.PartType.Ball
-        centerSphere.BrickColor = BrickColor.new("Bright blue")
-        centerSphere.Material = Enum.Material.Neon
-        centerSphere.Transparency = 0.3
-        centerSphere.Anchored = true
-        centerSphere.CanCollide = false
-        centerSphere.Parent = workspace
-        table.insert(visualizationParts, centerSphere)
-        
-        for i = 1, segments do
-            local part = Instance.new("Part")
-            part.Size = Vector3.new(0.3, 0.1, 0.3)
-            part.BrickColor = BrickColor.new("Bright green")
-            part.Material = Enum.Material.Neon
-            part.Transparency = 0.7
-            part.Anchored = true
-            part.CanCollide = false
-            part.Parent = workspace
-            table.insert(visualizationParts, part)
-        end
-        
-        local function UpdateVisualization()
-            if not config_114514.ShowVisualization then return end
-            if not LocalPlayer.Character then return end
-            local root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if not root then return end
-            
-            local center = root.Position + Vector3.new(0, 0.5, 0)
-            local lookVector = root.CFrame.LookVector
-            local distance = config_114514.BaseDistance
-            local angle = math.rad(config_114514.TargetAngle)
-            
-            centerSphere.Position = center
-            
-            for i = 1, #visualizationParts - 1 do
-                local part = visualizationParts[i + 1]
-                local segmentAngle = (i - 1) * (2 * angle) / (#visualizationParts - 2) - angle
-                local rotCFrame = CFrame.fromAxisAngle(Vector3.new(0, 1, 0), segmentAngle)
-                local dir = rotCFrame:VectorToWorldSpace(lookVector)
-                local pos = center + dir * distance
-                part.Position = pos
-                local lookAtCenter = CFrame.lookAt(pos, center)
-                part.CFrame = lookAtCenter
-            end
-        end
-        
-        local visConnection
-        visConnection = RunService.Heartbeat:Connect(function()
-            if not config_114514.ShowVisualization then
-                for _, part in ipairs(visualizationParts) do
-                    part:Destroy()
-                end
-                visualizationParts = {}
-                visConnection:Disconnect()
-                return
-            end
-            pcall(UpdateVisualization)
+            autoPunchState.isRunning = false
         end)
     end
-    
-    local function HasTargetSound(character)
-        if not character then return false end
-        local rootPart = character:FindFirstChild("HumanoidRootPart")
-        if not rootPart then return false end
-        
-        for _, child in ipairs(rootPart:GetChildren()) do
-            if child:IsA("Sound") then
-                local soundId = tostring(child.SoundId)
-                local numericId = string.match(soundId, "(%d+)$")
-                if numericId and soundLookup[numericId] then
-                    return true
-                end
-            end
-        end
-        
-        return false
+    local function stopAutoPunch()
+        if not autoPunchState.isRunning then return end
+        autoPunchState.enabled = false
+        if autoPunchState.task then task.cancel(autoPunchState.task); autoPunchState.task = nil end
+        autoPunchState.isRunning = false
     end
-    
-    local function HasTargetAnimation(character)
-        if not character then return false end
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        if not humanoid then return false end
-        
-        local animator = humanoid:FindFirstChildOfClass("Animator")
-        if animator then
-            for _, track in pairs(animator:GetPlayingAnimationTracks()) do
-                if track.Animation then
-                    local animId = tostring(track.Animation.AnimationId)
-                    local numericId = string.match(animId, "(%d+)$")
-                    if numericId and animLookup[numericId] then
-                        return true
-                    end
-                end
-            end
-        end
-        
-        return false
-    end
-    
-    local function GetMoveCompensation()
-        if not LocalPlayer.Character then return 0 end
-        local rootPart = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not rootPart then return 0 end
-        
-        local velocity = rootPart.Velocity
-        local speed = math.sqrt(velocity.X^2 + velocity.Y^2 + velocity.Z^2)
-        return config_114514.MoveCompBase + (speed * config_114514.MoveCompFactor)
-    end
-    
-    local function IsFastKiller(killer)
-        if not killer then return false end
-        local killerRoot = killer:FindFirstChild("HumanoidRootPart")
-        if not killerRoot then return false end
-        
-        local killerVel = killerRoot.Velocity
-        local killerSpeed = math.sqrt(killerVel.X^2 + killerVel.Y^2 + killerVel.Z^2)
-        return killerSpeed > config_114514.MinAttackSpeed
-    end
-    
-    local function GetTotalDetectionRange(killer)
-        if config_114514.UseSimplePrediction then
-            local base = config_114514.BaseDistance
-            local simple = config_114514.SimplePredictAmount
-            local pingBonus = GetPingCompensation() * 4
-            return base + simple + pingBonus
-        else
-            local base = config_114514.BaseDistance
-            local moveBonus = GetMoveCompensation()
-            local predict = 0
-            local pingBonus = GetPingCompensation() * 8
-            local reactionBoost = config_114514.ReactionBoost
 
-            if config_114514.EnablePrediction and killer and killer:FindFirstChild("HumanoidRootPart") then
-                local killerVel = killer.HumanoidRootPart.Velocity
-                local killerSpeed = math.sqrt(killerVel.X^2 + killerVel.Y^2 + killerVel.Z^2)
-                
-                if killerSpeed > config_114514.SpeedThreshold then
-                    predict = math.min(
-                        config_114514.PredictMax, 
-                        config_114514.PredictBase + (killerSpeed * config_114514.PredictFactor)
-                    )
-                end
-                
-                if IsFastKiller(killer) then
-                    predict = predict * config_114514.FastKillerAdjust
-                end
-            end
-            
-            return (base + moveBonus + predict + pingBonus) * reactionBoost
+    local aimState = {
+        enabled = false,
+        duration = 0.2,
+        trackedAnimations = {
+            ["108911997126897"] = true, ["82137285150006"] = true, ["129843313690921"] = true,
+            ["140703210927645"] = true, ["136007065400978"] = true, ["86096387000557"] = true,
+            ["87259391926321"] = true, ["86709774283672"] = true, ["108807732150251"] = true,
+            ["138040001965654"] = true
+        },
+        humanoid = nil, hrp = nil, lastTrigger = 0, isAiming = false, connection = nil, charConn = nil
+    }
+    local function getValidTarget()
+        local killers = workspace:FindFirstChild("Players")
+        if killers then killers = killers:FindFirstChild("Killers") end
+        if not killers then return nil end
+        for _, target in ipairs(killers:GetChildren()) do
+            if target:IsA("Model") and target:FindFirstChild("HumanoidRootPart") then return target.HumanoidRootPart end
         end
+        return nil
     end
-    
-    local function IsTargetingMe(killer)
-        local myCharacter = LocalPlayer.Character
-        if not myCharacter then return false end
-        
-        local myRoot = myCharacter:FindFirstChild("HumanoidRootPart")
-        local killerRoot = killer and killer:FindFirstChild("HumanoidRootPart")
-        if not myRoot or not killerRoot then return false end
-        
-        local directionToMe = (myRoot.Position - killerRoot.Position).Unit
-        local killerLook = killerRoot.CFrame.LookVector
-        
-        local dot = directionToMe:Dot(killerLook)
-        local angle = math.deg(math.acos(math.clamp(dot, -1, 1)))
-        
-        return angle <= config_114514.TargetAngle
-    end
-    
-    local function IsKillerInRange(killer)
-        local myCharacter = LocalPlayer.Character
-        if not myCharacter then return false end
-        
-        local myRoot = myCharacter:FindFirstChild("HumanoidRootPart")
-        local killerRoot = killer and killer:FindFirstChild("HumanoidRootPart")
-        if not myRoot or not killerRoot then return false end
-        
-        local distance = (myRoot.Position - killerRoot.Position).Magnitude
-        local detectionRange = GetTotalDetectionRange(killer)
-        
-        return distance <= detectionRange
-    end
-    
-    local function UpdateThreatCache()
-        local currentTime = os.clock()
-        if currentTime - lastThreatUpdate < 0.1 then
-            return threatCache
-        end
-        lastThreatUpdate = currentTime
-        
-        threatCache = {}
-        local killersFolder = workspace:FindFirstChild("Killers") or (workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers"))
-        if not killersFolder then return threatCache end
-        
-        local myCharacter = LocalPlayer.Character
-        if not myCharacter then return threatCache end
-        
-        local myRoot = myCharacter:FindFirstChild("HumanoidRootPart")
-        if not myRoot then return threatCache end
-        
-        for _, killer in ipairs(killersFolder:GetChildren()) do
-            if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
-                local killerRoot = killer.HumanoidRootPart
-                
-                if IsKillerInRange(killer) and IsTargetingMe(killer) then
-                    local hasSound = HasTargetSound(killer)
-                    local hasAnim = HasTargetAnimation(killer)
-                    
-                    if hasSound or hasAnim then
-                        local distance = (myRoot.Position - killerRoot.Position).Magnitude
-                        local detectionRange = GetTotalDetectionRange(killer)
-                        
-                        threatCache[killer] = {
-                            distance = distance,
-                            detectionRange = detectionRange,
-                            timestamp = currentTime,
-                            hasSound = hasSound,
-                            hasAnim = hasAnim
-                        }
-                    end
+    local function getPlayingAnimIds()
+        local ids = {}
+        if aimState.humanoid then
+            for _, track in ipairs(aimState.humanoid:GetPlayingAnimationTracks()) do
+                if track.Animation and track.Animation.AnimationId then
+                    local id = track.Animation.AnimationId:match("%d+")
+                    if id then ids[id] = true end
                 end
             end
         end
-        
-        return threatCache
+        return ids
     end
-    
+    local function onRenderStep()
+        if not aimState.enabled or not aimState.humanoid or not aimState.hrp then return end
+        local playing = getPlayingAnimIds()
+        local triggered = false
+        for id in pairs(aimState.trackedAnimations) do if playing[id] then triggered = true break end end
+        if triggered then aimState.lastTrigger = tick(); aimState.isAiming = true end
+        if aimState.isAiming and tick() - aimState.lastTrigger <= aimState.duration then
+            local target = getValidTarget()
+            if target then
+                local dir = (target.Position - aimState.hrp.Position).Unit
+                local yRot = math.atan2(-dir.X, -dir.Z)
+                aimState.hrp.CFrame = CFrame.new(aimState.hrp.Position) * CFrame.Angles(0, yRot, 0)
+            end
+        elseif aimState.isAiming then
+            aimState.isAiming = false
+        end
+    end
+    local function setupCharacter(char) aimState.humanoid = char:WaitForChild("Humanoid"); aimState.hrp = char:WaitForChild("HumanoidRootPart") end
+    local function enableAimbot()
+        if aimState.connection then return end
+        if game.Players.LocalPlayer.Character then setupCharacter(game.Players.LocalPlayer.Character) end
+        aimState.charConn = game.Players.LocalPlayer.CharacterAdded:Connect(setupCharacter)
+        aimState.connection = game:GetService("RunService").RenderStepped:Connect(onRenderStep)
+    end
+    local function disableAimbot()
+        if aimState.connection then aimState.connection:Disconnect(); aimState.connection = nil end
+        if aimState.charConn then aimState.charConn:Disconnect(); aimState.charConn = nil end
+        aimState.humanoid = nil; aimState.hrp = nil; aimState.isAiming = false
+    end
+
+    local blockConfig = {
+        enabled = false, blockCooldown = 0.08, showBox = false,
+        boxWidth = 15, boxHeight = 12, boxLength = 15, boxTransparency = 0.90,
+        boxColorR = 255, boxColorG = 0, boxColorB = 0
+    }
+    local blockState = {
+        lastBlock = 0, combatConn = nil, visConn = nil, activeKillers = {}, animListeners = {},
+        killerBoxes = {}, soundLookup = nil, animLookup = nil,
+    }
+    blockState.soundLookup = {}
+    for id in pairs(getgenv().AutoBlockSounds) do blockState.soundLookup[id] = true; blockState.soundLookup["rbxassetid://" .. id] = true end
+    blockState.animLookup = {}
+    for id in pairs(getgenv().AutoBlockAnims) do blockState.animLookup["rbxassetid://" .. id] = true end
+
+    local function getBoxColor()
+        return Color3.fromRGB(blockConfig.boxColorR, blockConfig.boxColorG, blockConfig.boxColorB)
+    end
+
+    local function SetupAnimationListener(killer)
+        if blockState.animListeners[killer] then return end
+        local humanoid = killer:FindFirstChild("Humanoid")
+        if not humanoid then return end
+        local animator = humanoid:FindFirstChildOfClass("Animator")
+        if not animator then return end
+        local conn = animator.AnimationPlayed:Connect(function(track)
+            if not blockConfig.enabled then return end
+            local animId = track.Animation and track.Animation.AnimationId
+            if animId and blockState.animLookup[animId] then
+                blockState.activeKillers[killer] = true
+                task.delay(5, function() blockState.activeKillers[killer] = nil end)
+            end
+        end)
+        blockState.animListeners[killer] = conn
+        killer.AncestryChanged:Connect(function(_, parent)
+            if not parent then
+                if blockState.animListeners[killer] then blockState.animListeners[killer]:Disconnect(); blockState.animListeners[killer] = nil end
+                blockState.activeKillers[killer] = nil
+                if blockState.killerBoxes[killer] then blockState.killerBoxes[killer]:Destroy(); blockState.killerBoxes[killer] = nil end
+            end
+        end)
+    end
+
+    local function HasTargetSound(killer)
+        local root = killer:FindFirstChild("HumanoidRootPart")
+        if not root then return false end
+        for _, child in ipairs(root:GetChildren()) do
+            if child:IsA("Sound") then
+                local id = tostring(child.SoundId)
+                local numId = string.match(id, "(%d+)$")
+                if numId and blockState.soundLookup[numId] then return true end
+            end
+        end
+        return false
+    end
+    local function HasAttackAnimation(killer) return blockState.activeKillers[killer] == true end
+    local function IsPlayerInBox(killer)
+        local killerRoot = killer:FindFirstChild("HumanoidRootPart")
+        local myChar = game.Players.LocalPlayer.Character
+        if not killerRoot or not myChar then return false end
+        local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+        if not myRoot then return false end
+        local killerPos = killerRoot.Position
+        local forward, right, up = killerRoot.CFrame.LookVector, killerRoot.CFrame.RightVector, killerRoot.CFrame.UpVector
+        local rel = myRoot.Position - killerPos
+        local f = rel:Dot(forward); local r = rel:Dot(right); local u = rel:Dot(up)
+        return f >= 0 and f <= blockConfig.boxLength and math.abs(r) <= blockConfig.boxWidth/2 and math.abs(u) <= blockConfig.boxHeight/2
+    end
     local function GetThreateningKillers()
-        local cache = UpdateThreatCache()
         local killers = {}
-        local currentTime = os.clock()
-        
-        for killer, data in pairs(cache) do
-            if currentTime - data.timestamp < 0.2 then
-                table.insert(killers, killer)
+        local folder = workspace:FindFirstChild("Killers") or (workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers"))
+        if not folder then return killers end
+        for _, killer in ipairs(folder:GetChildren()) do
+            if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
+                if IsPlayerInBox(killer) and (HasTargetSound(killer) or HasAttackAnimation(killer)) then
+                    table.insert(killers, killer)
+                end
             end
         end
-        
         return killers
     end
-    
-    local function GetAdjustedCooldown()
-        return 0
-    end
-    
     local function PerformBlock()
         local now = os.clock()
-        pcall(function()
-            local args = {
-                "UseActorAbility",
-                { buffer.fromstring("\003\005\000\000\000Block") }
-            }
-            game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Network"):WaitForChild("RemoteEvent"):FireServer(unpack(args))
-            lastBlockTime = now
-        end)
-    end
-    
-    local function CombatLoop()
-        local currentTime = os.clock()
-        if currentTime - lastScanTime >= config_114514.ScanInterval then
-            lastScanTime = currentTime
-            
-            if not LocalPlayer.Character then return end
-            local myRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if not myRoot then return end
-            
-            local killers = GetThreateningKillers()
-            if #killers > 0 then
-                PerformBlock()
-            end
-        end
-    end
-    
-    ZZ2:AddToggle("AutoBlockToggle", {
-        Text = "Auto Block",
-        Default = false,
-        Callback = function(enabled)
-            config_114514.Enabled = enabled
-            if enabled then
-                if combatConnection then
-                    combatConnection:Disconnect()
-                end
-                combatConnection = RunService.Stepped:Connect(function()
-                    pcall(CombatLoop)
-                end)
-            elseif combatConnection then
-                combatConnection:Disconnect()
-                combatConnection = nil
-            end
-        end
-    })
-    
-    ZZ2:AddSlider("BaseDistance", {
-        Text = "基础距离",
-        Default = 16,
-        Min = 5,
-        Max = 30,
-        Rounding = 1,
-        Callback = function(value)
-            config_114514.BaseDistance = value
-            print(string.format("基础距离已设为 %.1fm | 当前总检测范围: %.1fm", value, GetTotalDetectionRange(nil)))
-        end
-    })
-    
-    ZZ2:AddToggle("SimplePredictionToggle", {
-        Text = "启用简单预判",
-        Default = true,
-        Callback = function(enabled)
-            config_114514.UseSimplePrediction = enabled
-            print(enabled and "已切换为简单预判模式" or "已切换为复杂预测模式")
-            print(string.format("当前总检测范围: %.1fm", GetTotalDetectionRange(nil)))
-        end
-    })
-    
-    ZZ2:AddSlider("SimplePredictAmount", {
-        Text = "简单预判距离",
-        Default = 2,
-        Min = 0,
-        Max = 10,
-        Rounding = 1,
-        Callback = function(value)
-            config_114514.SimplePredictAmount = value
-            print(string.format("简单预判距离已设为 %.1fm | 当前总检测范围: %.1fm", value, GetTotalDetectionRange(nil)))
-        end
-    })
-    
-    ZZ2:AddToggle("ComplexPredictionToggle", {
-        Text = "启用复杂预测",
-        Default = false,
-        Callback = function(enabled)
-            config_114514.EnablePrediction = enabled
-            print(enabled and "复杂预测已启用" or "复杂预测已禁用")
-        end
-    })
-    
-    ZZ2:AddSlider("TargetAngleSlider", {
-        Text = "角度",
-        Default = 70,
-        Min = 10,
-        Max = 180,
-        Rounding = 1,
-        Callback = function(value)
-            config_114514.TargetAngle = value
-        end
-    })
-    
-    ZZ2:AddToggle("VisualizationToggle", {
-        Text = "可视化",
-        Default = false,
-        Callback = function(enabled)
-            config_114514.ShowVisualization = enabled
-            if enabled then
-                CreateVisualization()
-            else
-                for _, part in ipairs(visualizationParts) do
-                    part:Destroy()
-                end
-                visualizationParts = {}
-            end
-        end
-    })
-
-    LocalPlayer.CharacterAdded:Connect(function()
-        if config_114514.Enabled and combatConnection then
-            combatConnection:Disconnect()
-            combatConnection = RunService.Stepped:Connect(CombatLoop)
-        end
-        if config_114514.ShowVisualization then
-            CreateVisualization()
-        end
-    end)
-end)
-
-local PunchBox = Tabs.zdg:AddLeftGroupbox('自动拳击（智能检测）')
-
-local punchConfig = {
-    Enabled = false,
-    Cooldown = 0.4,
-    Range = 15,
-    Angle = 70,
-    UseSoundDetection = true,
-}
-
-local lastPunchTime = 0
-local punchConnection = nil
-
-local function HasTargetSoundPunch(character)
-    if not character then return false end
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if not rootPart then return false end
-    
-    for _, child in ipairs(rootPart:GetChildren()) do
-        if child:IsA("Sound") then
-            local soundId = tostring(child.SoundId)
-            local numericId = string.match(soundId, "(%d+)$")
-            if numericId and AutoBlockSounds[numericId] then
-                return true
-            end
-        end
-    end
-    return false
-end
-
-local function IsPunchTargetValid()
-    local myChar = LocalP.Character
-    if not myChar then return false end
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return false end
-    
-    local killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
-    if not killersFolder then return false end
-    
-    for _, killer in ipairs(killersFolder:GetChildren()) do
-        if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
-            local killerRoot = killer.HumanoidRootPart
-            local distance = (myRoot.Position - killerRoot.Position).Magnitude
-            if distance <= punchConfig.Range then
-                if punchConfig.UseSoundDetection and not HasTargetSoundPunch(killer) then
-                else
-                    local toTarget = (killerRoot.Position - myRoot.Position).Unit
-                    local myLook = myRoot.CFrame.LookVector
-                    local dot = toTarget:Dot(myLook)
-                    local angle = math.deg(math.acos(math.clamp(dot, -1, 1)))
-                    if angle <= punchConfig.Angle then
-                        return true
-                    end
-                end
-            end
-        end
-    end
-    return false
-end
-
-local function SendPunch()
-    local now = os.clock()
-    if now - lastPunchTime >= punchConfig.Cooldown then
-        pcall(function()
-            local args = {
-                "UseActorAbility",
-                { buffer.fromstring("\003\005\000\000\000Punch") }
-            }
-            game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Network"):WaitForChild("RemoteEvent"):FireServer(unpack(args))
-            lastPunchTime = now
-            if punchConfig.Enabled then
-                print("AutoPunch executed")
-            end
-        end)
-    end
-end
-
-local function PunchLoop()
-    if punchConfig.Enabled and IsPunchTargetValid() then
-        SendPunch()
-    end
-end
-
-PunchBox:AddToggle("PunchToggle", {
-    Text = "启用自动拳击",
-    Default = false,
-    Callback = function(state)
-        punchConfig.Enabled = state
-        if state then
-            if punchConnection then punchConnection:Disconnect() end
-            punchConnection = RunService.Stepped:Connect(function()
-                pcall(PunchLoop)
+        if now - blockState.lastBlock >= blockConfig.blockCooldown then
+            pcall(function()
+                local args = { "UseActorAbility", { buffer.fromstring("\003\005\000\000\000Block") } }
+                game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Network"):WaitForChild("RemoteEvent"):FireServer(unpack(args))
+                blockState.lastBlock = now
             end)
-        else
-            if punchConnection then
-                punchConnection:Disconnect()
-                punchConnection = nil
-            end
         end
     end
-})
+    local function CombatLoop() if #GetThreateningKillers() > 0 then PerformBlock() end end
+    local function CreateBox(killer)
+        local root = killer.HumanoidRootPart
+        local box = Instance.new("Part")
+        box.Size = Vector3.new(blockConfig.boxWidth, blockConfig.boxHeight, blockConfig.boxLength)
+        box.Material = Enum.Material.Neon; box.Transparency = blockConfig.boxTransparency
+        local col = getBoxColor()
+        box.BrickColor = BrickColor.new(col); box.Color = col
+        box.Anchored = false; box.CanCollide = false; box.CastShadow = false
+        box.Parent = workspace
+        return box
+    end
+    local function UpdateVisualization()
+        local folder = workspace:FindFirstChild("Killers") or (workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers"))
+        if not folder then return end
+        for _, killer in ipairs(folder:GetChildren()) do
+            if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
+                local root = killer.HumanoidRootPart
+                local box = blockState.killerBoxes[killer]
+                if blockConfig.showBox then
+                    if not box then box = CreateBox(killer); blockState.killerBoxes[killer] = box end
+                    local offset = root.CFrame.LookVector * (blockConfig.boxLength / 2)
+                    box.CFrame = CFrame.new(root.Position + offset, root.Position + offset + root.CFrame.LookVector)
+                    box.Size = Vector3.new(blockConfig.boxWidth, blockConfig.boxHeight, blockConfig.boxLength)
+                    box.Transparency = blockConfig.boxTransparency
+                    local col = getBoxColor()
+                    box.Color = col; box.BrickColor = BrickColor.new(col)
+                elseif box then
+                    box:Destroy(); blockState.killerBoxes[killer] = nil
+                end
+            end
+        end
+        for killer, box in pairs(blockState.killerBoxes) do
+            if not killer or not killer.Parent then box:Destroy(); blockState.killerBoxes[killer] = nil end
+        end
+    end
+    local function InitKillers()
+        local folder = workspace:FindFirstChild("Killers") or (workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers"))
+        if folder then
+            for _, killer in ipairs(folder:GetChildren()) do
+                if killer:IsA("Model") then task.wait(0.5); SetupAnimationListener(killer) end
+            end
+            folder.ChildAdded:Connect(function(killer) if killer:IsA("Model") then task.wait(0.5); SetupAnimationListener(killer) end end)
+        end
+    end
+    InitKillers()
 
-PunchBox:AddSlider("PunchCooldown", {
-    Text = "出拳间隔(秒)",
-    Default = 0.4,
-    Min = 0.1,
-    Max = 1.5,
-    Rounding = 2,
-    Callback = function(v) punchConfig.Cooldown = v end
-})
+    SimpleCoreGroup:AddToggle("SimpleAutoBlock", {
+        Text = "自动格挡",
+        Default = false,
+        Callback = function(v)
+            blockConfig.enabled = v
+            if v then
+                if blockState.combatConn then blockState.combatConn:Disconnect() end
+                blockState.combatConn = game:GetService("RunService").Stepped:Connect(CombatLoop)
+            else
+                if blockState.combatConn then blockState.combatConn:Disconnect(); blockState.combatConn = nil end
+            end
+        end
+    })
+    SimpleCoreGroup:AddToggle("SimpleShowBox", {
+        Text = "显示格挡范围方框",
+        Default = false,
+        Callback = function(v)
+            blockConfig.showBox = v
+            if v then
+                if blockState.visConn then blockState.visConn:Disconnect() end
+                blockState.visConn = game:GetService("RunService").Heartbeat:Connect(UpdateVisualization)
+            else
+                if blockState.visConn then blockState.visConn:Disconnect(); blockState.visConn = nil end
+                for _, box in pairs(blockState.killerBoxes) do pcall(function() box:Destroy() end) end
+                blockState.killerBoxes = {}
+            end
+        end
+    })
+    SimpleCoreGroup:AddDivider()
+    SimpleCoreGroup:AddToggle("SimpleAutoPunch", {
+        Text = "自动拳击",
+        Default = false,
+        Callback = function(v) autoPunchState.enabled = v; if v then startAutoPunch() else stopAutoPunch() end end
+    })
+    SimpleCoreGroup:AddToggle("SimplePunchAimbot", {
+        Text = "拳击自瞄",
+        Default = false,
+        Callback = function(v) aimState.enabled = v; if v then enableAimbot() else disableAimbot() end end
+    })
 
-PunchBox:AddSlider("PunchRange", {
-    Text = "拳击范围",
-    Default = 15,
-    Min = 5,
-    Max = 30,
-    Rounding = 1,
-    Callback = function(v) punchConfig.Range = v end
-})
+    SimpleParamGroup:AddSlider("SimpleAimDuration", {
+        Text = "自瞄持续时间 (秒)",
+        Min = 0.05, Max = 0.5, Default = 0.2, Rounding = 2,
+        Callback = function(v) aimState.duration = v end
+    })
+    SimpleParamGroup:AddSlider("SimpleBoxWidth", {
+        Text = "方框宽度", Min = 2, Max = 20, Default = 15, Rounding = 1,
+        Callback = function(v) blockConfig.boxWidth = v end
+    })
+    SimpleParamGroup:AddSlider("SimpleBoxHeight", {
+        Text = "方框高度", Min = 2, Max = 20, Default = 12, Rounding = 1,
+        Callback = function(v) blockConfig.boxHeight = v end
+    })
+    SimpleParamGroup:AddSlider("SimpleBoxLength", {
+        Text = "方框长度", Min = 3, Max = 25, Default = 15, Rounding = 1,
+        Callback = function(v) blockConfig.boxLength = v end
+    })
+    SimpleParamGroup:AddSlider("SimpleBoxTransparency", {
+        Text = "方框透明度", Min = 0, Max = 1, Default = 0.90, Rounding = 2,
+        Callback = function(v)
+            blockConfig.boxTransparency = v
+            for _, box in pairs(blockState.killerBoxes) do pcall(function() box.Transparency = v end) end
+        end
+    })
+    SimpleParamGroup:AddSlider("SimpleBoxColorR", {
+        Text = "方框颜色 - 红", Min = 0, Max = 255, Default = 255, Rounding = 0,
+        Callback = function(v)
+            blockConfig.boxColorR = v
+            local col = getBoxColor()
+            for _, box in pairs(blockState.killerBoxes) do pcall(function() box.Color = col; box.BrickColor = BrickColor.new(col) end) end
+        end
+    })
+    SimpleParamGroup:AddSlider("SimpleBoxColorG", {
+        Text = "方框颜色 - 绿", Min = 0, Max = 255, Default = 0, Rounding = 0,
+        Callback = function(v)
+            blockConfig.boxColorG = v
+            local col = getBoxColor()
+            for _, box in pairs(blockState.killerBoxes) do pcall(function() box.Color = col; box.BrickColor = BrickColor.new(col) end) end
+        end
+    })
+    SimpleParamGroup:AddSlider("SimpleBoxColorB", {
+        Text = "方框颜色 - 蓝", Min = 0, Max = 255, Default = 0, Rounding = 0,
+        Callback = function(v)
+            blockConfig.boxColorB = v
+            local col = getBoxColor()
+            for _, box in pairs(blockState.killerBoxes) do pcall(function() box.Color = col; box.BrickColor = BrickColor.new(col) end) end
+        end
+    })
+    SimpleParamGroup:AddSlider("SimpleBlockCooldown", {
+        Text = "格挡冷却 (秒)", Min = 0.02, Max = 0.3, Default = 0.08, Rounding = 3,
+        Callback = function(v) blockConfig.blockCooldown = v end
+    })
+end
 
-PunchBox:AddSlider("PunchAngle", {
-    Text = "面对角度",
-    Default = 70,
-    Min = 10,
-    Max = 180,
-    Rounding = 1,
-    Callback = function(v) punchConfig.Angle = v end
-})
-
-PunchBox:AddToggle("PunchSoundDetection", {
-    Text = "声音检测（仅对指定声音ID出拳）",
-    Default = true,
-    Callback = function(v) punchConfig.UseSoundDetection = v end
-})
 local Generator = Tabs.zdx:AddLeftGroupbox("自动修机")
 
 Generator:AddSlider("RepairSpeed", {
@@ -2048,39 +1756,83 @@ Generator:AddToggle("AutoGenerator",{
     end
 })
 
-Generator:AddToggle("InstantRepair", {
+local GeneratorGroup = Tabs.zdx:AddLeftGroupbox("秒修机")
+
+local genState = { enabled = false, interval = 2, task = nil }
+
+local function repairGenerators()
+    local mapFolder = workspace:FindFirstChild("Map")
+    if not mapFolder then return end
+    local ingameFolder = mapFolder:FindFirstChild("Ingame")
+    if not ingameFolder then return end
+    local mapSubFolder = ingameFolder:FindFirstChild("Map")
+    if not mapSubFolder then return end
+    
+    for _, obj in ipairs(mapSubFolder:GetChildren()) do
+        if obj.Name == "Generator" and obj:FindFirstChild("Progress") and obj.Progress.Value < 100 then
+            local remote = obj:FindFirstChild("Remotes") and obj.Remotes:FindFirstChild("RE")
+            if remote then
+                pcall(function() remote:FireServer() end)
+            end
+        end
+    end
+end
+
+local function startGeneratorLoop()
+    if genState.task then return end
+    genState.task = task.spawn(function()
+        while genState.enabled do
+            repairGenerators()
+            task.wait(genState.interval)
+        end
+        genState.task = nil
+    end)
+end
+
+local function stopGeneratorLoop()
+    if genState.task then
+        task.cancel(genState.task)
+        genState.task = nil
+    end
+end
+
+GeneratorGroup:AddToggle("AutoGenToggle", {
     Text = "秒修机",
     Default = false,
     Callback = function(v)
-        _G.InstantRepair = v
-        task.spawn(function()
-            while _G.InstantRepair do
-                if game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("PuzzleUI") then
-                    -- 等待1秒后执行前两次事件
-                    wait(1)
-                    for i = 1, 2 do
-                        for _,v in ipairs(workspace["Map"]["Ingame"]["Map"]:GetChildren()) do
-                            if v.Name == "Generator" then
-                                v["Remotes"]["RE"]:FireServer()
-                            end
-                        end
-                    end
-                    
-                    -- 再等待2秒后执行后两次事件
-                    wait(2)
-                    for i = 1, 2 do
-                        for _,v in ipairs(workspace["Map"]["Ingame"]["Map"]:GetChildren()) do
-                            if v.Name == "Generator" then
-                                v["Remotes"]["RE"]:FireServer()
-                            end
-                        end
-                    end
-                end
-                wait()
-            end
-        end)
+        genState.enabled = v
+        if v then
+            startGeneratorLoop()
+        else
+            stopGeneratorLoop()
+        end
     end
 })
+
+GeneratorGroup:AddSlider("GenInterval", {
+    Text = "执行间隔 (秒)",
+    Min = 0.5,
+    Max = 5,
+    Default = 2,
+    Rounding = 1,
+    Callback = function(v)
+        genState.interval = v
+        if genState.enabled then
+            stopGeneratorLoop()
+            startGeneratorLoop()
+        end
+    end
+})
+
+GeneratorGroup:AddButton({
+    Text = "立即修理一次",
+    Func = function()
+        repairGenerators()
+        Library:Notify("已尝试修理所有发电机", 2)
+    end
+})
+
+print("[Obsidian UI] 自动快速发电机模块已加载")
 
 local KillerSurvival = Tabs.zdx:AddRightGroupbox('传送修机[危险]')
 
@@ -4735,7 +4487,6 @@ local defaultAimDistance = 100
 local aimDistanceSettings = { GAA = defaultAimDistance }
 local aimSmoothnessSettings = { GAA = 20 }
 local aimDurationSettings = { GAA = 25 }
-local targetSoundId = "rbxassetid://99281727182505"
 
 pcall(function()
     aimbotGroup:AddSlider("GAA_Distance", {
@@ -4773,16 +4524,6 @@ pcall(function()
         end
     })
 end)
-pcall(function()
-    aimbotGroup:AddTextBox("GuestSoundId", {
-        Text = "触发音效ID",
-        Default = targetSoundId,
-        Placeholder = "rbxassetid://99281727182505",
-        Callback = function(value)
-            targetSoundId = value
-        end
-    })
-end)
 
 local function SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
     local targetLook = (targetPos - currentCamCF.Position).Unit
@@ -4792,11 +4533,7 @@ local function SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
 end
 
 local function getNearestKiller()
-    local players = workspace:FindFirstChild("Players")
-    local killersFolder = players and players:FindFirstChild("Killers")
-    if not killersFolder then
-        killersFolder = workspace:FindFirstChild("Killers")
-    end
+    local killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
     if not killersFolder then return nil end
     local myHRP = game.Players.LocalPlayer.Character and game.Players.LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if not myHRP then return nil end
@@ -4821,9 +4558,7 @@ local function executeAim()
         activeAimConnection = nil
     end
     local targetKiller = getNearestKiller()
-    if not targetKiller or not targetKiller:FindFirstChild("HumanoidRootPart") then
-        return
-    end
+    if not targetKiller or not targetKiller:FindFirstChild("HumanoidRootPart") then return end
     local smoothness = aimSmoothnessSettings.GAA
     local duration = aimDurationSettings.GAA
     local iterations = 0
@@ -4836,9 +4571,7 @@ local function executeAim()
             workspace.CurrentCamera.CFrame = SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
         else
             conn:Disconnect()
-            if activeAimConnection == conn then
-                activeAimConnection = nil
-            end
+            if activeAimConnection == conn then activeAimConnection = nil end
         end
     end)
     activeAimConnection = conn
@@ -4863,20 +4596,32 @@ local function setupGuestAim(enabled)
         player.CharacterAdded:Wait()
         character = player.Character
     end
-    local function onSoundAdded(sound)
-        if sound:IsA("Sound") and sound.SoundId == targetSoundId then
-            executeAim()
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then return end
+    local animator = humanoid:FindFirstChildOfClass("Animator")
+    if not animator then return end
+    
+    local targetAnimIds = {
+        "rbxassetid://130013637722362",
+        "rbxassetid://122875546317402"
+    }
+    
+    aimConnection = animator.AnimationPlayed:Connect(function(animationTrack)
+        if animationTrack.Animation and animationTrack.Animation.AnimationId then
+            local animId = animationTrack.Animation.AnimationId
+            for _, id in ipairs(targetAnimIds) do
+                if animId == id then
+                    executeAim()
+                    break
+                end
+            end
         end
-    end
-    for _, child in ipairs(character:GetDescendants()) do
-        onSoundAdded(child)
-    end
-    aimConnection = character.DescendantAdded:Connect(onSoundAdded)
+    end)
 end
 
 pcall(function()
     aimbotGroup:AddToggle("GuestAimToggle", {
-        Text = "访客相机自瞄",
+        Text = "访客相机自瞄（出拳时触发）",
         Default = false,
         Callback = function(v)
             setupGuestAim(v)
@@ -4884,7 +4629,7 @@ pcall(function()
     })
 end)
 
-print("访客自瞄脚本已加载，当前触发音效ID: " .. targetSoundId)
+print("访客自瞄已加载，触发动画ID: 130013637722362 或 122875546317402")
 
 local aimbotNoilsounds = {
     "rbxassetid://90382006346718"
@@ -5444,235 +5189,179 @@ NotifyEntityKillers:Disconnect()
 end
 end})
 
-local SM = Tabs.tfz:AddRightGroupbox('显示碰撞箱')
+local function CreateHitboxFeatures()
+    local KK_Left = Tabs.tfz:AddLeftGroupbox("碰撞箱")
+    local KK_Right = Tabs.tfz:AddRightGroupbox("参数调节")
 
-local Workspace = game:GetService("Workspace")
+    local HitboxTrackingEnabled = false
+    local HeartbeatConnection = nil
+    local MaxDistance = 12
+    local IgnoreNPCs = false
+    local IgnoreSurvivors = false
 
-local player = Players.LocalPlayer
-local playerName = player.Name
-local hitbox = nil
-local updateConnection = nil
-
-local hitboxesFolder = Workspace:FindFirstChild("Hitboxes")
-if not hitboxesFolder then
-    hitboxesFolder = Instance.new("Folder")
-    hitboxesFolder.Name = "Hitboxes"
-    hitboxesFolder.Parent = Workspace
-end
-
-local function createHitbox()
-    local part = Instance.new("Part")
-    part.Name = playerName .. "_Hitbox"
-    part.Size = Vector3.new(4, 7, 4)
-    part.Anchored = true
-    part.CanCollide = false
-    part.Transparency = 0.5
-    part.Material = Enum.Material.ForceField
-    part.Color = Color3.fromRGB(255, 255, 200)
-    part.Parent = hitboxesFolder
-    return part
-end
-
-local function updateHitbox()
-    local character = player.Character
-    if character and character:FindFirstChild("HumanoidRootPart") and hitbox then
-        local root = character.HumanoidRootPart
-        local offset = root.CFrame.LookVector * 4
-        hitbox.CFrame = CFrame.new(root.Position + offset, root.Position + root.CFrame.LookVector)
-    end
-end
-
-SM:AddToggle("打人", {
-    Text = "Show HitBox",
-    Default = false,
-    Callback = function(state)
-        if state then
-       
-            hitbox = createHitbox()
-            updateConnection = RunService.RenderStepped:Connect(updateHitbox)
-         
-            player.CharacterAdded:Connect(function(char)
-                task.wait(1)
-                if hitbox then
-                    hitbox:Destroy()
-                end
-                hitbox = createHitbox()
-            end)
-        else
-            
-            if updateConnection then
-                updateConnection:Disconnect()
-                updateConnection = nil
-            end
-            if hitbox then
-                hitbox:Destroy()
-                hitbox = nil
-            end
-        end
-    end
-})
-
-local MS = Tabs.tfz:AddRightGroupbox("静默碰撞箱调节")
-local MovementEnabled = false
-local ForwardSpeed = 0
-local ForwardMultiplier = 10
-local SideMultiplier = 12
-
-local a = function(...)
-    local g = buffer.fromstring(game:GetService("HttpService"):JSONEncode(table.pack(...)[1]))
-    return {g}
-end
-
-local b = function(cf, v)
-    local bd = buffer.create(30)
-    local pos = cf.Position
-    local view = cf.LookVector
-    local of = 0
-    for i, v in pairs(
-        {
-            pos.X,
-            pos.Y,
-            pos.Z,
-            view.X,
-            view.Y,
-            view.Z,
-            v.X,
-            v.Y,
-            v.Z
-        }
-    ) do
-        if (i >= 4 and i <= 6) then
-            buffer.writei16(bd, of, math.floor(v * 10000))
-            of = of + 2
-        else
-            buffer.writef32(bd, of, tonumber(string.format("%.2f", v)))
-            of = of + 4
-        end
-    end
-    return bd
-end
-
-local c
-for i,v in pairs(getgc(true)) do
- if type(v)=="table" then
-  if rawget(v,"FireServerConnection") then
-   c = hookfunction(rawget(v,"FireServerConnection"),function(_,code,name,...)
-   if code == "UpdCF" and name=="UREMOTE_EVENT" then
-     return
-    end
-    return c(_,code,name,...)
-   end)
-  end
- end
-end
-
-local d = require(game.ReplicatedStorage.Modules.Util)
-local e = function()
-    if not MovementEnabled then return end
-    
-    local lp = game.Players.LocalPlayer
-    if not (lp and lp.Character and lp.Character.PrimaryPart) then return end
-    if not d:IsAlive(lp.Character) then return end
-    
-    local n = lp.Character.PrimaryPart.CFrame
-    local k = lp.Character.PrimaryPart.AssemblyLinearVelocity.Y
-    
-    local baseForward = n.LookVector.X * ForwardMultiplier
-    local modifiedForward = baseForward + ForwardSpeed
-    
-    local m = Vector3.new(
-        modifiedForward,
-        k,
-        n.LookVector.Z * SideMultiplier
-    )
-    
-    local args = {
-        "UpdCF",
-        a(
-            b(
-                n,
-                m
-            )
-        )
+    local AttackAnimations = {
+        ["rbxassetid://82766292406776"] = true,
+        ["rbxassetid://128763023821409"] = true,
+        ["rbxassetid://75886957408638"] = true,
+        ["rbxassetid://119114307046769"] = true,
+        ["rbxassetid://79935632537639"] = true,
+        ["rbxassetid://115822216957588"] = true,
+        ["rbxassetid://109664483649841"] = true,
+        ["rbxassetid://82561719951163"] = true,
+        ["rbxassetid://90562829487800"] = true,
+        ["rbxassetid://108805867834084"] = true,
+        ["rbxassetid://131170650740600"] = true,
     }
-    game:GetService("ReplicatedStorage")
-        :WaitForChild("Modules")
-        :WaitForChild("Network")
-        :WaitForChild("UnreliableRemoteEvent")
-        :FireServer(unpack(args))
-end
 
-local heartbeatConnection
-local function startMovement()
-    if heartbeatConnection then
-        heartbeatConnection:Disconnect()
-    end
-    heartbeatConnection = game:GetService("RunService").Heartbeat:Connect(function()
-        task.spawn(function()
-            e()
-        end)
-    end)
-end
-
-local function stopMovement()
-    if heartbeatConnection then
-        heartbeatConnection:Disconnect()
-        heartbeatConnection = nil
-    end
-end
-
-MS:AddToggle("MovementToggle", {
-    Text = "向前移动修改",
-    Default = false,
-    Callback = function(state)
-        MovementEnabled = state
-        if state then
-            startMovement()
-        else
-            stopMovement()
+    local function isPlayingAttackAnimation(humanoid)
+        if not humanoid then return false end
+        for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+            local animId = track.Animation and track.Animation.AnimationId
+            if animId and AttackAnimations[animId] then
+                local length = track.Length
+                if length > 0 and (track.TimePosition / length) < 0.75 then
+                    return true
+                end
+            end
         end
+        return false
     end
-})
 
-MS:AddSlider("ForwardSpeed", {
-    Text = "向前速度",
-    Default = 0,
-    Min = 0,
-    Max = 90,
-    Rounding = 0,
-    Callback = function(value)
-        if not MovementEnabled then return end
-        ForwardSpeed = value
+    local function getTargets(ignoreSurvivors, ignoreNPCs)
+        local targets = {}
+        if not ignoreSurvivors then
+            local survivors = workspace.Players:FindFirstChild("Survivors")
+            if survivors then
+                for _, child in ipairs(survivors:GetChildren()) do
+                    if child:IsA("Model") and child:FindFirstChild("HumanoidRootPart") and child ~= game.Players.LocalPlayer.Character then
+                        table.insert(targets, child)
+                    end
+                end
+            end
+        end
+        if not ignoreNPCs then
+            local npcsFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("NPCs")
+            if npcsFolder then
+                for _, child in ipairs(npcsFolder:GetChildren()) do
+                    if child:IsA("Model") and child:FindFirstChild("HumanoidRootPart") then
+                        table.insert(targets, child)
+                    end
+                end
+            end
+        end
+        return targets
     end
-})
 
-MS:AddSlider("ForwardMultiplier", {
-    Text = "前向乘数",
-    Default = 40,
-    Min = 0,
-    Max = 90,
-    Rounding = 0,
-    Callback = function(value)
-        if not MovementEnabled then return end
-        ForwardMultiplier = value
+    local function calculateVelocity(myRoot, targetRoot, ping)
+        if not myRoot or not targetRoot then return nil end
+        local offset = targetRoot.Position - myRoot.Position
+        local randomVec = Vector3.new(math.random(-150, 150)/100, 0, math.random(-150, 150)/100)
+        local targetVel = targetRoot.Velocity or Vector3.zero
+        local compensation = targetVel * (ping * 1.25)
+        local desired = offset + randomVec + compensation
+        local timeFactor = math.max(ping * 2, 0.05)
+        return desired / timeFactor
     end
-})
 
-MS:AddSlider("SideMultiplier", {
-    Text = "侧向乘数",
-    Default = 50,
-    Min = 0,
-    Max = 90,
-    Rounding = 0,
-    Callback = function(value)
-        if not MovementEnabled then return end
-        SideMultiplier = value
-    end
-})
+    KK_Left:AddToggle("HitboxTrackingToggle", {
+        Text = "碰撞箱追踪",
+        Default = false,
+        Risky = true,
+        Callback = function(state)
+            HitboxTrackingEnabled = state
+            if HeartbeatConnection then
+                HeartbeatConnection:Disconnect()
+                HeartbeatConnection = nil
+            end
+            if not state then return end
 
-MS:AddLabel("想要使用隐身灵魂出窍请看说明")
+            local player = game.Players.LocalPlayer
+            local character = player.Character or player.CharacterAdded:Wait()
+            local humanoid = character:WaitForChild("Humanoid")
+            local rootPart = character:WaitForChild("HumanoidRootPart")
 
-MS:AddLabel("隐身灵魂出窍使用说明：\n\n想要使用先开启一下然后再关闭，进入局内后如果你是关闭状态就会出窍，重新开启即可恢复让实体回到玩家", true)
+            local charAddedConn
+            charAddedConn = player.CharacterAdded:Connect(function(newChar)
+                character = newChar
+                humanoid = character:WaitForChild("Humanoid")
+                rootPart = character:WaitForChild("HumanoidRootPart")
+            end)
+
+            HeartbeatConnection = game:GetService('RunService').Heartbeat:Connect(function()
+                if not HitboxTrackingEnabled or not rootPart or not humanoid then return end
+
+                if not isPlayingAttackAnimation(humanoid) then return end
+
+                local targets = getTargets(IgnoreSurvivors, IgnoreNPCs)
+                local closestTarget = nil
+                local closestDist = MaxDistance
+                for _, t in ipairs(targets) do
+                    local tRoot = t:FindFirstChild("HumanoidRootPart")
+                    if tRoot then
+                        local dist = (tRoot.Position - rootPart.Position).Magnitude
+                        if dist < closestDist then
+                            closestDist = dist
+                            closestTarget = t
+                        end
+                    end
+                end
+
+                if not closestTarget then return end
+                local targetRoot = closestTarget:FindFirstChild("HumanoidRootPart")
+                if not targetRoot then return end
+
+                local ping = player:GetNetworkPing()
+                local neededVel = calculateVelocity(rootPart, targetRoot, ping)
+                if neededVel then
+                    local oldVel = rootPart.Velocity
+                    rootPart.Velocity = neededVel
+                    task.wait()
+                    if rootPart and rootPart.Parent then
+                        rootPart.Velocity = oldVel
+                    end
+                end
+            end)
+
+            local cleanupConn
+            cleanupConn = game:GetService("RunService").Stepped:Connect(function()
+                if not HitboxTrackingEnabled then
+                    if HeartbeatConnection then HeartbeatConnection:Disconnect() end
+                    if charAddedConn then charAddedConn:Disconnect() end
+                    if cleanupConn then cleanupConn:Disconnect() end
+                    HeartbeatConnection = nil
+                end
+            end)
+        end,
+    })
+
+    KK_Right:AddSlider("DistanceSlider", {
+        Text = "距离",
+        Default = 12,
+        Min = 1,
+        Max = 250,
+        Rounding = 0,
+        Callback = function(value)
+            MaxDistance = value
+        end
+    })
+
+    KK_Right:AddDropdown("IgnoreTargetsDropdown", {
+        Values = { "NPC", "幸存者" },
+        Default = {},
+        Multi = true,
+        Text = "忽略目标",
+        Callback = function(selected)
+            IgnoreNPCs = false
+            IgnoreSurvivors = false
+            for _, v in ipairs(selected) do
+                if v == "NPC" then IgnoreNPCs = true end
+                if v == "幸存者" then IgnoreSurvivors = true end
+            end
+        end
+    })
+end
+
+CreateHitboxFeatures()
 
 local ZZ = Tabs.ani:AddLeftGroupbox('Noli反效果')
 
