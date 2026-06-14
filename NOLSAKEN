@@ -5239,6 +5239,11 @@ local function setupGuestAim(enabled)
     
     local targetAnimIds = {
         "rbxassetid://130013637722362",
+        "rbxassetid://77031186463633",
+        "rbxassetid://135082408740278",
+        "rbxassetid://87342912251776",
+        "rbxassetid://104737611521215",
+        "rbxassetid://130013637722362",
         "rbxassetid://122875546317402"
     }
     
@@ -5832,7 +5837,7 @@ local function CreateHitboxFeatures()
     local HitboxTrackingEnabled = false
     local HeartbeatConnection = nil
     local MaxDistance = 12
-    local IgnoreNPCs = false
+    local IgnoreKillers = false
     local IgnoreSurvivors = false
 
     local AttackAnimations = {
@@ -5849,6 +5854,10 @@ local function CreateHitboxFeatures()
         ["rbxassetid://131170650740600"] = true,
         ["rbxassetid://99422666075424"] = true,
         ["rbxassetid://112729366306321"] = true,
+        ["rbxassetid://117122137029468"] = true,
+        ["rbxassetid://120983784864337"] = true,
+        ["rbxassetid://122216937410629"] = true,
+        ["rbxassetid://125672824467073"] = true,
     }
 
     local function isPlayingAttackAnimation(humanoid)
@@ -5865,7 +5874,7 @@ local function CreateHitboxFeatures()
         return false
     end
 
-    local function getTargets(ignoreSurvivors, ignoreNPCs)
+    local function getTargets(ignoreSurvivors, ignoreKillers)
         local targets = {}
         if not ignoreSurvivors then
             local survivors = workspace.Players:FindFirstChild("Survivors")
@@ -5877,10 +5886,10 @@ local function CreateHitboxFeatures()
                 end
             end
         end
-        if not ignoreNPCs then
-            local npcsFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("NPCs")
-            if npcsFolder then
-                for _, child in ipairs(npcsFolder:GetChildren()) do
+        if not ignoreKillers then
+            local killersFolder = workspace.Players:FindFirstChild("Killers")
+            if killersFolder then
+                for _, child in ipairs(killersFolder:GetChildren()) do
                     if child:IsA("Model") and child:FindFirstChild("HumanoidRootPart") then
                         table.insert(targets, child)
                     end
@@ -5930,7 +5939,7 @@ local function CreateHitboxFeatures()
 
                 if not isPlayingAttackAnimation(humanoid) then return end
 
-                local targets = getTargets(IgnoreSurvivors, IgnoreNPCs)
+                local targets = getTargets(IgnoreSurvivors, IgnoreKillers)
                 local closestTarget = nil
                 local closestDist = MaxDistance
                 for _, t in ipairs(targets) do
@@ -5984,15 +5993,15 @@ local function CreateHitboxFeatures()
     })
 
     KK_Right:AddDropdown("IgnoreTargetsDropdown", {
-        Values = { "NPC", "幸存者" },
+        Values = { "杀手", "幸存者" },
         Default = {},
         Multi = true,
         Text = "忽略目标",
         Callback = function(selected)
-            IgnoreNPCs = false
+            IgnoreKillers = false
             IgnoreSurvivors = false
             for _, v in ipairs(selected) do
-                if v == "NPC" then IgnoreNPCs = true end
+                if v == "杀手" then IgnoreKillers = true end
                 if v == "幸存者" then IgnoreSurvivors = true end
             end
         end
