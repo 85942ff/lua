@@ -1653,22 +1653,139 @@ do
         end
     })
     SimpleCoreGroup:AddDivider()
-    SimpleCoreGroup:AddToggle("SimpleAutoPunch", {
-        Text = "自动拳击",
-        Default = false,
-        Callback = function(v) autoPunchState.enabled = v; if v then startAutoPunch() else stopAutoPunch() end end
-    })
-    SimpleCoreGroup:AddToggle("SimplePunchAimbot", {
-        Text = "拳击自瞄",
-        Default = false,
-        Callback = function(v) aimState.enabled = v; if v then enableAimbot() else disableAimbot() end end
-    })
+local PunchBoxLeft = Tabs.zdg:AddLeftGroupbox('自动拳击')
+local PunchBoxRight = Tabs.zdg:AddRightGroupbox('参数调节')
 
-    SimpleParamGroup:AddSlider("SimpleAimDuration", {
-        Text = "自瞄持续时间 (秒)",
-        Min = 0.05, Max = 0.5, Default = 0.2, Rounding = 2,
-        Callback = function(v) aimState.duration = v end
-    })
+local punchConfig = {
+    Enabled = false,
+    Cooldown = 0.4,
+    Range = 15,
+    Angle = 70,
+    UseSoundDetection = true,
+}
+
+local lastPunchTime = 0
+local punchConnection = nil
+
+local function HasTargetSoundPunch(character)
+    if not character then return false end
+    local rootPart = character:FindFirstChild("HumanoidRootPart")
+    if not rootPart then return false end
+    for _, child in ipairs(rootPart:GetChildren()) do
+        if child:IsA("Sound") then
+            local soundId = tostring(child.SoundId)
+            local numericId = string.match(soundId, "(%d+)$")
+            if numericId and AutoBlockSounds[numericId] then
+                return true
+            end
+        end
+    end
+    return false
+end
+
+local function IsPunchTargetValid()
+    local myChar = LocalP.Character
+    if not myChar then return false end
+    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
+    if not myRoot then return false end
+    local killersFolder = workspace:FindFirstChild("Players") and workspace.Players:FindFirstChild("Killers")
+    if not killersFolder then return false end
+    for _, killer in ipairs(killersFolder:GetChildren()) do
+        if killer:IsA("Model") and killer:FindFirstChild("HumanoidRootPart") then
+            local killerRoot = killer.HumanoidRootPart
+            local distance = (myRoot.Position - killerRoot.Position).Magnitude
+            if distance <= punchConfig.Range then
+                if punchConfig.UseSoundDetection and not HasTargetSoundPunch(killer) then
+                else
+                    local toTarget = (killerRoot.Position - myRoot.Position).Unit
+                    local myLook = myRoot.CFrame.LookVector
+                    local dot = toTarget:Dot(myLook)
+                    local angle = math.deg(math.acos(math.clamp(dot, -1, 1)))
+                    if angle <= punchConfig.Angle then
+                        return true
+                    end
+                end
+            end
+        end
+    end
+    return false
+end
+
+local function SendPunch()
+    local now = os.clock()
+    if now - lastPunchTime >= punchConfig.Cooldown then
+        pcall(function()
+            local args = {
+                "UseActorAbility",
+                { buffer.fromstring("\003\005\000\000\000Punch") }
+            }
+            game:GetService("ReplicatedStorage"):WaitForChild("Modules"):WaitForChild("Network"):WaitForChild("RemoteEvent"):FireServer(unpack(args))
+            lastPunchTime = now
+            if punchConfig.Enabled then
+                print("AutoPunch executed")
+            end
+        end)
+    end
+end
+
+local function PunchLoop()
+    if punchConfig.Enabled and IsPunchTargetValid() then
+        SendPunch()
+    end
+end
+
+PunchBoxLeft:AddToggle("PunchToggle", {
+    Text = "自动拳击",
+    Default = false,
+    Callback = function(state)
+        punchConfig.Enabled = state
+        if state then
+            if punchConnection then punchConnection:Disconnect() end
+            punchConnection = RunService.Stepped:Connect(function()
+                pcall(PunchLoop)
+            end)
+        else
+            if punchConnection then
+                punchConnection:Disconnect()
+                punchConnection = nil
+            end
+        end
+    end
+})
+
+PunchBoxRight:AddSlider("PunchCooldown", {
+    Text = "出拳间隔(秒)",
+    Default = 0.4,
+    Min = 0.1,
+    Max = 1.5,
+    Rounding = 2,
+    Callback = function(v) punchConfig.Cooldown = v end
+})
+
+PunchBoxRight:AddSlider("PunchRange", {
+    Text = "拳击范围",
+    Default = 15,
+    Min = 5,
+    Max = 30,
+    Rounding = 1,
+    Callback = function(v) punchConfig.Range = v end
+})
+
+PunchBoxRight:AddSlider("PunchAngle", {
+    Text = "面对角度",
+    Default = 70,
+    Min = 10,
+    Max = 180,
+    Rounding = 1,
+    Callback = function(v) punchConfig.Angle = v end
+})
+
+PunchBoxRight:AddToggle("PunchSoundDetection", {
+    Text = "声音检测（仅对指定声音ID出拳）",
+    Default = true,
+    Callback = function(v) punchConfig.UseSoundDetection = v end
+})
+
     SimpleParamGroup:AddSlider("SimpleBoxWidth", {
         Text = "方框宽度", Min = 2, Max = 20, Default = 15, Rounding = 1,
         Callback = function(v) blockConfig.boxWidth = v end
@@ -5730,6 +5847,8 @@ local function CreateHitboxFeatures()
         ["rbxassetid://90562829487800"] = true,
         ["rbxassetid://108805867834084"] = true,
         ["rbxassetid://131170650740600"] = true,
+        ["rbxassetid://99422666075424"] = true,
+        ["rbxassetid://112729366306321"] = true,
     }
 
     local function isPlayingAttackAnimation(humanoid)
@@ -6850,68 +6969,6 @@ FunGroup:AddSlider("JumpDistance", {
     end,
     Tooltip = "调节后空翻的跳跃距离",
 })
-
-if Tabs.yul then
-    local invisGroup = Tabs.yul:AddLeftGroupbox("隐身")
-    local invisibilityRunning = false
-    local invisibilityThread = nil
-    local currentInvisAnim = nil
-    local invisAnimId = "75804462760596"
-
-    local function startInvisibility()
-        if invisibilityRunning then return end
-        local player = game.Players.LocalPlayer
-        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-        if not humanoid or humanoid.RigType ~= Enum.HumanoidRigType.R6 then
-            warn("隐身仅支持 R6 角色")
-            return
-        end
-        invisibilityRunning = true
-        invisibilityThread = task.spawn(function()
-            while invisibilityRunning do
-                local anim = Instance.new("Animation")
-                anim.AnimationId = "rbxassetid://" .. invisAnimId
-                local loadedAnim = humanoid:LoadAnimation(anim)
-                currentInvisAnim = loadedAnim
-                loadedAnim.Looped = false
-                loadedAnim:Play()
-                loadedAnim:AdjustSpeed(0)
-                task.wait(0.000001)
-            end
-        end)
-    end
-
-    local function stopInvisibility()
-        invisibilityRunning = false
-        if invisibilityThread then task.cancel(invisibilityThread); invisibilityThread = nil end
-        if currentInvisAnim then
-            currentInvisAnim:Stop()
-            currentInvisAnim = nil
-        end
-        local player = game.Players.LocalPlayer
-        local humanoid = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-        if humanoid then
-            for _, track in pairs(humanoid:GetPlayingAnimationTracks()) do
-                track:AdjustSpeed(100000)
-            end
-        end
-        local animateScript = player.Character and player.Character:FindFirstChild("Animate")
-        if animateScript then
-            animateScript.Disabled = true
-            animateScript.Disabled = false
-        end
-    end
-
-    invisGroup:AddToggle("InvisibilityToggle", {
-        Text = "隐身",
-        Default = false,
-        Callback = function(state)
-            if state then startInvisibility() else stopInvisibility() end
-        end
-    })
-else
-    warn("娱乐功能标签页不存在，无法添加隐身")
-end
 
 local MenuGroup = Tabs["UI Settings"]:AddLeftGroupbox("Debug")
 
