@@ -5837,28 +5837,28 @@ local function CreateHitboxFeatures()
     local HitboxTrackingEnabled = false
     local HeartbeatConnection = nil
     local MaxDistance = 12
-    local IgnoreKillers = false
+    local IgnoreNPCs = false
     local IgnoreSurvivors = false
 
     local AttackAnimations = {
-        ["rbxassetid://82766292406776"] = true,
-        ["rbxassetid://128763023821409"] = true,
-        ["rbxassetid://75886957408638"] = true,
-        ["rbxassetid://119114307046769"] = true,
-        ["rbxassetid://79935632537639"] = true,
-        ["rbxassetid://115822216957588"] = true,
-        ["rbxassetid://109664483649841"] = true,
-        ["rbxassetid://82561719951163"] = true,
-        ["rbxassetid://90562829487800"] = true,
-        ["rbxassetid://108805867834084"] = true,
-        ["rbxassetid://131170650740600"] = true,
-        ["rbxassetid://99422666075424"] = true,
-        ["rbxassetid://112729366306321"] = true,
-        ["rbxassetid://117122137029468"] = true,
-        ["rbxassetid://120983784864337"] = true,
-        ["rbxassetid://122216937410629"] = true,
-        ["rbxassetid://125672824467073"] = true,
-    }
+    ["rbxassetid://82766292406776"] = true,
+    ["rbxassetid://128763023821409"] = true,
+    ["rbxassetid://75886957408638"] = true,
+    ["rbxassetid://119114307046769"] = true,
+    ["rbxassetid://79935632537639"] = true,
+    ["rbxassetid://115822216957588"] = true,
+    ["rbxassetid://109664483649841"] = true,
+    ["rbxassetid://82561719951163"] = true,
+    ["rbxassetid://90562829487800"] = true,
+    ["rbxassetid://108805867834084"] = true,
+    ["rbxassetid://131170650740600"] = true,
+    ["rbxassetid://99422666075424"] = true,
+    ["rbxassetid://112729366306321"] = true,
+    ["rbxassetid://117122137029468"] = true,
+    ["rbxassetid://120983784864337"] = true,
+    ["rbxassetid://122216937410629"] = true,
+    ["rbxassetid://125672824467073"] = true,
+}
 
     local function isPlayingAttackAnimation(humanoid)
         if not humanoid then return false end
@@ -5874,7 +5874,7 @@ local function CreateHitboxFeatures()
         return false
     end
 
-    local function getTargets(ignoreSurvivors, ignoreKillers)
+    local function getTargets(ignoreSurvivors, ignoreNPCs)
         local targets = {}
         if not ignoreSurvivors then
             local survivors = workspace.Players:FindFirstChild("Survivors")
@@ -5886,10 +5886,10 @@ local function CreateHitboxFeatures()
                 end
             end
         end
-        if not ignoreKillers then
-            local killersFolder = workspace.Players:FindFirstChild("Killers")
-            if killersFolder then
-                for _, child in ipairs(killersFolder:GetChildren()) do
+        if not ignoreNPCs then
+            local npcsFolder = workspace:FindFirstChild("Map") and workspace.Map:FindFirstChild("NPCs")
+            if npcsFolder then
+                for _, child in ipairs(npcsFolder:GetChildren()) do
                     if child:IsA("Model") and child:FindFirstChild("HumanoidRootPart") then
                         table.insert(targets, child)
                     end
@@ -5939,7 +5939,7 @@ local function CreateHitboxFeatures()
 
                 if not isPlayingAttackAnimation(humanoid) then return end
 
-                local targets = getTargets(IgnoreSurvivors, IgnoreKillers)
+                local targets = getTargets(IgnoreSurvivors, IgnoreNPCs)
                 local closestTarget = nil
                 local closestDist = MaxDistance
                 for _, t in ipairs(targets) do
@@ -5993,15 +5993,15 @@ local function CreateHitboxFeatures()
     })
 
     KK_Right:AddDropdown("IgnoreTargetsDropdown", {
-        Values = { "杀手", "幸存者" },
+        Values = { "NPC", "幸存者" },
         Default = {},
         Multi = true,
         Text = "忽略目标",
         Callback = function(selected)
-            IgnoreKillers = false
+            IgnoreNPCs = false
             IgnoreSurvivors = false
             for _, v in ipairs(selected) do
-                if v == "杀手" then IgnoreKillers = true end
+                if v == "NPC" then IgnoreNPCs = true end
                 if v == "幸存者" then IgnoreSurvivors = true end
             end
         end
