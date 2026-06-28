@@ -3956,7 +3956,7 @@ end
 local defaultAimDistance = 100
 local aimDistanceSettings = { GAA = defaultAimDistance }
 local aimSmoothnessSettings = { GAA = 20 }
-local aimDurationSettings = { GAA = 5 }
+local aimDurationSettings = { GAA = 12 }
 
 pcall(function()
     aimbotGroup:AddSlider("GAA_Distance", {
