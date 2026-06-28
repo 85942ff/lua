@@ -3955,7 +3955,7 @@ end
 local defaultAimDistance = 100
 local aimDistanceSettings = { GAA = defaultAimDistance }
 local aimSmoothnessSettings = { GAA = 20 }
-local aimDurationSettings = { GAA = 2 }
+local aimDurationSettings = { GAA = 5 }
 
 pcall(function()
     aimbotGroup:AddSlider("GAA_Distance", {
@@ -3985,8 +3985,8 @@ pcall(function()
     aimbotGroup:AddSlider("GAA_Duration", {
         Text = "锁定时间",
         Default = aimDurationSettings.GAA,
-        Min = 1,
-        Max = 10,
+        Min = 1,               
+        Max = 20,            
         Rounding = 1,
         Callback = function(value)
             aimDurationSettings.GAA = value
@@ -4030,10 +4030,11 @@ local function executeAim()
     if not targetKiller or not targetKiller:FindFirstChild("HumanoidRootPart") then return end
     local smoothness = aimSmoothnessSettings.GAA
     local duration = aimDurationSettings.GAA
-    local startTime = tick()
+    local iterations = 0
     local conn
     conn = game:GetService("RunService").RenderStepped:Connect(function()
-        if tick() - startTime < duration then
+        iterations = iterations + 1
+        if iterations <= duration then
             local currentCamCF = workspace.CurrentCamera.CFrame
             local targetPos = targetKiller.HumanoidRootPart.Position
             workspace.CurrentCamera.CFrame = SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
@@ -4076,7 +4077,8 @@ local function setupGuestAim(enabled)
         "rbxassetid://87342912251776",
         "rbxassetid://104737611521215",
         "rbxassetid://130013637722362",
-        "rbxassetid://122875546317402"
+        "rbxassetid://122875546317402",
+        "rbxassetid://88225458824662"
     }
     
     aimConnection = animator.AnimationPlayed:Connect(function(animationTrack)
@@ -4299,7 +4301,6 @@ local function CreateHitboxFeatures()
     ["rbxassetid://120983784864337"] = true,
     ["rbxassetid://122216937410629"] = true,
     ["rbxassetid://125672824467073"] = true,
-    ["rbxassetid://88225458824662"] = true,
 }
 
     local function isPlayingAttackAnimation(humanoid)
