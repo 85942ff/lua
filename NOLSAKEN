@@ -2135,17 +2135,17 @@ getgenv().AutoBlockAnims = {
 }
 
 getgenv().PunchAnims = {
-    ["108911997126897"]=true,["82137285150006"]=true,["129843313690921"]=true,
-    ["140703210927645"]=true,["136007065400978"]=true,["86096387000557"]=true,
-    ["87259391926321"]=true,["86709774283672"]=true,["108807732150251"]=true,
-    ["138040001965654"]=true
+    "122875546317402","130013637722362","104737611521215",
+    "87342912251776","135082408740278","77031186463633",
+    "130013637722362","86709774283672","108807732150251",
+    "138040001965654"
 }
 
 getgenv().PunchAnims = {
-    ["108911997126897"]=true,["82137285150006"]=true,["129843313690921"]=true,
-    ["140703210927645"]=true,["136007065400978"]=true,["86096387000557"]=true,
-    ["87259391926321"]=true,["86709774283672"]=true,["108807732150251"]=true,
-    ["138040001965654"]=true
+    "122875546317402","130013637722362","104737611521215",
+    "87342912251776","135082408740278","77031186463633",
+    "130013637722362","86709774283672","108807732150251",
+    "138040001965654"
 }
 
 getgenv().AutoBlockEnabled = false
@@ -2210,10 +2210,12 @@ end
 getgenv().fireRemotePunch = function()
     local args = {"UseActorAbility", {buffer.fromstring("\003\005\000\000\000Punch")}}
     game:GetService("ReplicatedStorage").Modules.Network.RemoteEvent:FireServer(unpack(args))
-    local closest = getgenv().getClosestKiller()
-    if closest then
-        getgenv().currentTargetKiller = closest
-        getgenv().faceKillerUntil = tick() + getgenv().faceKillerDuration
+    if getgenv().aimbotPunchOn then
+        local closest = getgenv().getClosestKiller()
+        if closest then
+            getgenv().currentTargetKiller = closest
+            getgenv().faceKillerUntil = tick() + getgenv().faceKillerDuration
+        end
     end
 end
 
