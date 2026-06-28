@@ -3947,9 +3947,10 @@ ZZ:AddButton({
 
 local SpecialAimbot = Tabs.Aimbot:AddLeftGroupbox("访客自瞄")
 
+-- 默认距离设置
 local aimbotGroup = SpecialAimbot or Tabs.Aimbot or Tabs.zdg or Tabs
 if not aimbotGroup then
-    error("aimbotGroup 未找到，请检查 Tabs 结构")
+    error("无法找到 UI 群组，请检查你的 UI 框架变量名")
 end
 
 local defaultAimDistance = 100
@@ -3985,8 +3986,8 @@ pcall(function()
     aimbotGroup:AddSlider("GAA_Duration", {
         Text = "锁定时间",
         Default = aimDurationSettings.GAA,
-        Min = 1,               
-        Max = 20,            
+        Min = 1,
+        Max = 20,
         Rounding = 1,
         Callback = function(value)
             aimDurationSettings.GAA = value
@@ -4096,7 +4097,7 @@ end
 
 pcall(function()
     aimbotGroup:AddToggle("GuestAimToggle", {
-        Text = "访客自瞄",
+        Text = "访客相机自瞄（出拳时触发）",
         Default = false,
         Callback = function(v)
             setupGuestAim(v)
