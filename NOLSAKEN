@@ -2977,9 +2977,9 @@ getgenv().RunService.RenderStepped:Connect(function()
 end)
 
 getgenv().punchAnimIds = {
-    "108911997126897","82137285150006","129843313690921",
-    "140703210927645","136007065400978","86096387000557",
-    "87259391926321","86709774283672","108807732150251",
+    "122875546317402","130013637722362","104737611521215",
+    "87342912251776","135082408740278","77031186463633",
+    "130013637722362","86709774283672","108807732150251",
     "138040001965654"
 }
 
@@ -3945,16 +3945,15 @@ ZZ:AddButton({
 
 local SpecialAimbot = Tabs.Aimbot:AddLeftGroupbox("访客自瞄")
 
--- 默认距离设置
 local aimbotGroup = SpecialAimbot or Tabs.Aimbot or Tabs.zdg or Tabs
 if not aimbotGroup then
-    error("无法找到 UI 群组，请检查你的 UI 框架变量名")
+    error("aimbotGroup 未找到，请检查 Tabs 结构")
 end
 
 local defaultAimDistance = 100
 local aimDistanceSettings = { GAA = defaultAimDistance }
 local aimSmoothnessSettings = { GAA = 20 }
-local aimDurationSettings = { GAA = 25 }
+local aimDurationSettings = { GAA = 2 }
 
 pcall(function()
     aimbotGroup:AddSlider("GAA_Distance", {
@@ -3982,10 +3981,10 @@ pcall(function()
 end)
 pcall(function()
     aimbotGroup:AddSlider("GAA_Duration", {
-        Text = "相机锁定持续时间(帧)",
+        Text = "锁定时间",
         Default = aimDurationSettings.GAA,
-        Min = 10,
-        Max = 200,
+        Min = 1,
+        Max = 10,
         Rounding = 1,
         Callback = function(value)
             aimDurationSettings.GAA = value
@@ -4029,11 +4028,10 @@ local function executeAim()
     if not targetKiller or not targetKiller:FindFirstChild("HumanoidRootPart") then return end
     local smoothness = aimSmoothnessSettings.GAA
     local duration = aimDurationSettings.GAA
-    local iterations = 0
+    local startTime = tick()
     local conn
     conn = game:GetService("RunService").RenderStepped:Connect(function()
-        iterations = iterations + 1
-        if iterations <= duration then
+        if tick() - startTime < duration then
             local currentCamCF = workspace.CurrentCamera.CFrame
             local targetPos = targetKiller.HumanoidRootPart.Position
             workspace.CurrentCamera.CFrame = SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
@@ -4094,7 +4092,7 @@ end
 
 pcall(function()
     aimbotGroup:AddToggle("GuestAimToggle", {
-        Text = "访客相机自瞄（出拳时触发）",
+        Text = "访客自瞄",
         Default = false,
         Callback = function(v)
             setupGuestAim(v)
