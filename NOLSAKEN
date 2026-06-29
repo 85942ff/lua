@@ -3956,7 +3956,7 @@ end
 local defaultAimDistance = 100
 local aimDistanceSettings = { GAA = defaultAimDistance }
 local aimSmoothnessSettings = { GAA = 20 }
-local aimDurationSettings = { GAA = 12 }
+local aimDurationSettings = { GAA = 16 }
 
 pcall(function()
     aimbotGroup:AddSlider("GAA_Distance", {
@@ -4097,7 +4097,7 @@ end
 
 pcall(function()
     aimbotGroup:AddToggle("GuestAimToggle", {
-        Text = "访客相机自瞄（出拳时触发）",
+        Text = "访客自瞄）",
         Default = false,
         Callback = function(v)
             setupGuestAim(v)
