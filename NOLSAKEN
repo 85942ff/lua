@@ -3947,7 +3947,6 @@ ZZ:AddButton({
 
 local SpecialAimbot = Tabs.Aimbot:AddLeftGroupbox("访客自瞄")
 
--- 默认距离设置
 local aimbotGroup = SpecialAimbot or Tabs.Aimbot or Tabs.zdg or Tabs
 if not aimbotGroup then
     error("无法找到 UI 群组，请检查你的 UI 框架变量名")
@@ -3956,7 +3955,7 @@ end
 local defaultAimDistance = 100
 local aimDistanceSettings = { GAA = defaultAimDistance }
 local aimSmoothnessSettings = { GAA = 20 }
-local aimDurationSettings = { GAA = 16 }
+local aimDurationSettings = { GAA = 50 }
 
 pcall(function()
     aimbotGroup:AddSlider("GAA_Distance", {
@@ -3974,7 +3973,7 @@ pcall(function()
     aimbotGroup:AddSlider("GAA_Smoothness", {
         Text = "相机平滑度",
         Default = aimSmoothnessSettings.GAA,
-        Min = 5,
+        Min = 0,
         Max = 100,
         Rounding = 1,
         Callback = function(value)
@@ -3987,7 +3986,7 @@ pcall(function()
         Text = "锁定时间",
         Default = aimDurationSettings.GAA,
         Min = 1,
-        Max = 20,
+        Max = 200,
         Rounding = 1,
         Callback = function(value)
             aimDurationSettings.GAA = value
@@ -3995,10 +3994,10 @@ pcall(function()
     })
 end)
 
-local function SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
+local function SmoothCameraLookAt(currentCamCF, targetPos, progress)
     local targetLook = (targetPos - currentCamCF.Position).Unit
     local currentLook = currentCamCF.LookVector
-    local newLook = currentLook:Lerp(targetLook, 1 / smoothness)
+    local newLook = currentLook:Lerp(targetLook, progress)
     return CFrame.lookAt(currentCamCF.Position, currentCamCF.Position + newLook * 100)
 end
 
@@ -4027,27 +4026,37 @@ local function executeAim()
         activeAimConnection:Disconnect()
         activeAimConnection = nil
     end
+
     local targetKiller = getNearestKiller()
     if not targetKiller or not targetKiller:FindFirstChild("HumanoidRootPart") then return end
-    local smoothness = aimSmoothnessSettings.GAA
-    local duration = aimDurationSettings.GAA
-    local iterations = 0
+
+    local totalFrames = aimDurationSettings.GAA
+    local smoothPower = aimSmoothnessSettings.GAA / 100
+    local currentFrame = 0
     local conn
+
     conn = game:GetService("RunService").RenderStepped:Connect(function()
-        iterations = iterations + 1
-        if iterations <= duration then
+        currentFrame += 1
+        local progress = math.clamp(currentFrame / totalFrames, 0, 1)
+        progress = progress ^ (1 - smoothPower)
+
+        if currentFrame <= totalFrames then
             local currentCamCF = workspace.CurrentCamera.CFrame
             local targetPos = targetKiller.HumanoidRootPart.Position
-            workspace.CurrentCamera.CFrame = SmoothCameraLookAt(currentCamCF, targetPos, smoothness)
+            workspace.CurrentCamera.CFrame = SmoothCameraLookAt(currentCamCF, targetPos, progress)
         else
             conn:Disconnect()
-            if activeAimConnection == conn then activeAimConnection = nil end
+            if activeAimConnection == conn then
+                activeAimConnection = nil
+            end
         end
     end)
+
     activeAimConnection = conn
 end
 
 local aimConnection = nil
+
 local function setupGuestAim(enabled)
     if aimConnection then
         aimConnection:Disconnect()
@@ -4060,44 +4069,51 @@ local function setupGuestAim(enabled)
         end
         return
     end
+
     local player = game.Players.LocalPlayer
-    local character = player.Character
-    if not character then
-        player.CharacterAdded:Wait()
-        character = player.Character
-    end
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then return end
-    local animator = humanoid:FindFirstChildOfClass("Animator")
-    if not animator then return end
-    
-    local targetAnimIds = {
-        "rbxassetid://130013637722362",
-        "rbxassetid://77031186463633",
-        "rbxassetid://135082408740278",
-        "rbxassetid://87342912251776",
-        "rbxassetid://104737611521215",
-        "rbxassetid://130013637722362",
-        "rbxassetid://122875546317402",
-        "rbxassetid://88225458824662"
-    }
-    
-    aimConnection = animator.AnimationPlayed:Connect(function(animationTrack)
-        if animationTrack.Animation and animationTrack.Animation.AnimationId then
-            local animId = animationTrack.Animation.AnimationId
-            for _, id in ipairs(targetAnimIds) do
-                if animId == id then
-                    executeAim()
-                    break
+    local function onCharacterAdded(char)
+        task.wait(0.2)
+        local humanoid = char:FindFirstChildOfClass("Humanoid")
+        if not humanoid then return end
+        local animator = humanoid:FindFirstChildOfClass("Animator")
+        if not animator then
+            animator = Instance.new("Animator")
+            animator.Parent = humanoid
+        end
+
+        local targetAnimIds = {
+            "rbxassetid://130013637722362",
+            "rbxassetid://77031186463633",
+            "rbxassetid://135082408740278",
+            "rbxassetid://87342912251776",
+            "rbxassetid://104737611521215",
+            "rbxassetid://130013637722362",
+            "rbxassetid://122875546317402",
+            "rbxassetid://88225458824662"
+        }
+
+        aimConnection = animator.AnimationPlayed:Connect(function(animationTrack)
+            if animationTrack.Animation and animationTrack.Animation.AnimationId then
+                local animId = animationTrack.Animation.AnimationId
+                for _, id in ipairs(targetAnimIds) do
+                    if animId == id then
+                        executeAim()
+                        break
+                    end
                 end
             end
-        end
-    end)
+        end)
+    end
+
+    if player.Character then
+        onCharacterAdded(player.Character)
+    end
+    player.CharacterAdded:Connect(onCharacterAdded)
 end
 
 pcall(function()
     aimbotGroup:AddToggle("GuestAimToggle", {
-        Text = "访客自瞄）",
+        Text = "访客自瞄（出拳时触发）",
         Default = false,
         Callback = function(v)
             setupGuestAim(v)
