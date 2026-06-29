@@ -4569,7 +4569,7 @@ local function CreateFeatures()
     MainGroup:AddSlider("TeleportSpeed", {
         Text = "传送间隔",
         Default = 0.1,
-        Min = 0.1,
+        Min = 0,
         Max = 1.0,
         Rounding = 1,
         Callback = function(value)
@@ -4604,7 +4604,7 @@ local function CreateFeatures()
     MainGroup:AddSlider("VampireSpeed", {
         Text = "吸血鬼间隔",
         Default = 0.1,
-        Min = 0.1,
+        Min = 0,
         Max = 2.0,
         Rounding = 1,
         Callback = function(value)
